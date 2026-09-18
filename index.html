@@ -40,13 +40,7 @@ label{display:block;font-size:12px;font-weight:700;margin:12px 0 6px}.field{widt
       <label>Senha de acesso</label><input id="authPass" class="field" type="password" minlength="6" autocomplete="current-password" required autofocus />
       <button class="btn full" id="authSubmit" type="submit">Entrar</button>
     </form>
-    <div class="msg" id="authMsg">Uma única senha é usada para o acesso ao sistema.</div>
-    <div style="text-align:center;margin-top:12px"><button id="resetAccess" class="linkbtn" type="button">Definir / alterar senha</button></div>
-    <div id="recoveryBox" class="hidden" style="margin-top:16px">
-      <label>Nova senha</label><input id="newPass" class="field" type="password" minlength="6" autocomplete="new-password" />
-      <label>Confirmar nova senha</label><input id="newPass2" class="field" type="password" minlength="6" autocomplete="new-password" />
-      <button id="saveNewPass" class="btn full" type="button">Salvar nova senha</button>
-    </div>
+    <div class="msg" id="authMsg">Digite a senha de acesso para entrar no sistema.</div>
   </div>
 </div>
 <div id="app" class="app">
@@ -102,8 +96,7 @@ let data={suppliers:[],payables:[],payments:[],income:[],expenses:[],receivables
 const pages=[['dashboard','Visão geral'],['payables','Contas a pagar'],['suppliers','Fornecedores'],['income','Entradas'],['expenses','Saídas'],['debts','Mapa das dívidas'],['gasoline','⛽ Gasolina']];
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.remove('hidden');setTimeout(()=>el.classList.add('hidden'),2800)}
 function showAuth(msg=''){ $('#app').classList.add('hidden'); $('#auth').classList.remove('hidden'); $('#logout').classList.add('hidden'); if(msg) $('#authMsg').textContent=msg; $('#authPass').value=''; $('#authPass').focus() }
-function showRecovery(){ $('#app').classList.add('hidden'); $('#auth').classList.remove('hidden'); $('#authForm').classList.add('hidden'); $('#resetAccess').classList.add('hidden'); $('#recoveryBox').classList.remove('hidden'); $('#authMsg').textContent='Defina uma nova senha para continuar.'; }
-function finishRecovery(){ $('#authForm').classList.remove('hidden'); $('#resetAccess').classList.remove('hidden'); $('#recoveryBox').classList.add('hidden'); $('#newPass').value=''; $('#newPass2').value=''; $('#authMsg').textContent='Senha atualizada. Entre novamente.'; }
+
 function closeEditor(){const m=$('#editModal');m.classList.add('hidden');$('#editForm').onsubmit=null;$('#editSave').classList.remove('hidden');$('#editCancel').textContent='Cancelar'}
 function openEditor(title,html,onSave){$('#editTitle').textContent=title;$('#editBody').innerHTML=html;const m=$('#editModal'),form=$('#editForm'),save=$('#editSave');save.classList.remove('hidden');$('#editCancel').textContent='Cancelar';m.classList.remove('hidden');save.disabled=false;form.onsubmit=async e=>{e.preventDefault();save.disabled=true;save.textContent='Salvando...';try{const ok=await onSave(new FormData(form));if(ok!==false)closeEditor()}catch(err){console.error(err);toast('Não foi possível salvar as alterações.')}finally{save.disabled=false;save.textContent='Salvar alterações'}};setTimeout(()=>form.querySelector('input,select,textarea')?.focus(),30)}
 $('#editClose').addEventListener('click',closeEditor);$('#editCancel').addEventListener('click',closeEditor);$('#editModal').addEventListener('click',e=>{if(e.target.id==='editModal')closeEditor()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#editModal').classList.contains('hidden'))closeEditor()});
@@ -111,10 +104,9 @@ function opts(items,current){return items.map(([v,l])=>'<option value="'+esc(v)+
 
 function navRender(){const html=pages.map(p=>'<button type="button" data-page="'+p[0]+'" class="'+(page===p[0]?'active':'')+'">'+p[1]+'</button>').join('');$('#nav').innerHTML=html;$('#mobileNav').innerHTML=html;document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>{page=b.dataset.page;history.replaceState(null,'','#'+page);navRender();render()}))}
 $('#authForm').addEventListener('submit',async e=>{e.preventDefault();const password=$('#authPass').value;$('#authSubmit').disabled=true;$('#authMsg').textContent='Aguarde...';const res=await sb.auth.signInWithPassword({email:AUTH_EMAIL,password});$('#authSubmit').disabled=false;if(res.error){$('#authMsg').textContent='Senha incorreta.';return}await boot(res.data.user)});
-let resetCooldown=false;$('#resetAccess').addEventListener('click',async()=>{if(resetCooldown)return;resetCooldown=true;$('#resetAccess').disabled=true;$('#authMsg').textContent='Enviando o link...';const res=await sb.auth.resetPasswordForEmail(AUTH_EMAIL);if(res.error){$('#authMsg').textContent='Não foi possível enviar: '+(res.error.message||'erro desconhecido');$('#resetAccess').disabled=false;resetCooldown=false;return}$('#authMsg').textContent='Link enviado para o e-mail da conta. Aguarde alguns segundos antes de solicitar outro.';setTimeout(()=>{resetCooldown=false;$('#resetAccess').disabled=false},65000)});
-$('#saveNewPass').addEventListener('click',async()=>{const p1=$('#newPass').value,p2=$('#newPass2').value;if(!p1||p1.length<6){$('#authMsg').textContent='A nova senha precisa ter pelo menos 6 caracteres.';return}if(p1!==p2){$('#authMsg').textContent='As senhas não conferem.';return}const res=await sb.auth.updateUser({password:p1});if(res.error){$('#authMsg').textContent='Não foi possível atualizar a senha.';return}finishRecovery();await sb.auth.signOut()});
+
 $('#logout').addEventListener('click',async()=>{await sb.auth.signOut();location.reload()});$('#refresh').addEventListener('click',loadAll);window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp)&&hp!==page){page=hp;navRender();render()}});
-sb.auth.onAuthStateChange(async(event,session)=>{if(event==='PASSWORD_RECOVERY'){showRecovery();return}if(session?.user&&event==='SIGNED_IN'){await boot(session.user)}if(!session&&event==='SIGNED_OUT'){showAuth()}});
+sb.auth.onAuthStateChange(async(event,session)=>{if(session?.user&&event==='SIGNED_IN'){await boot(session.user)}if(!session&&event==='SIGNED_OUT'){showAuth()}});
 
 async function boot(u){user=u;const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp))page=hp;$('#auth').classList.add('hidden');$('#app').classList.remove('hidden');$('#logout').classList.remove('hidden');$('#todayLabel').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});navRender();await loadAll()}
 async function loadAll(){if(!user)return;const [s,p,pp,i,e,r,rp,f,d]=await Promise.all([sb.from('suppliers').select('*').order('name'),sb.from('accounts_payable').select('*').order('due_date'),sb.from('payments').select('*'),sb.from('income').select('*').order('occurred_at',{ascending:false}),sb.from('expenses').select('*').order('occurred_at',{ascending:false}),sb.from('accounts_receivable').select('*').order('due_date'),sb.from('receivable_payments').select('*'),sb.from('fuel_expenses').select('*').order('fueled_at',{ascending:false}),sb.from('debt_items').select('*').order('priority').order('due_date')]);for(const q of [s,p,pp,i,e,r,rp,f,d])if(q.error){toast(q.error.message);return}data={suppliers:s.data||[],payables:p.data||[],payments:pp.data||[],income:i.data||[],expenses:e.data||[],receivables:r.data||[],receivablePayments:rp.data||[],fuel:f.data||[],debts:d.data||[]};render()}

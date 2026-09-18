@@ -33,7 +33,19 @@ label{display:block;font-size:12px;font-weight:700;margin:12px 0 6px}.field{widt
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
->
+<div id="auth" class="auth">
+  <div class="auth-card">
+    <div class="brand"><div class="logo">CF</div><div><h1>Cris Financeiro</h1><p>Acesso protegido</p></div></div>
+    <form id="authForm">
+      <label>Senha de acesso</label>
+      <input id="authPass" class="field" type="password" minlength="6" autocomplete="current-password" required autofocus />
+      <button class="btn full" id="authSubmit" type="submit">Entrar</button>
+    </form>
+    <div class="msg" id="authMsg">Digite a senha de acesso para entrar no sistema.</div>
+  </div>
+</div>
+
+<div id="app" class="app hidden">
   <aside class="sidebar">
     <div class="navbrand"><strong>Cris Financeiro</strong><span>Controle da loja</span></div>
     <nav class="nav" id="nav"></nav>
@@ -45,6 +57,7 @@ label{display:block;font-size:12px;font-weight:700;margin:12px 0 6px}.field{widt
     <div id="content"></div>
   </main>
 </div>
+
 <div id="toast" class="toast hidden"></div>
 <div id="editModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="editTitle">
   <div class="modal-card">
@@ -86,7 +99,17 @@ let signup=false, user=null, page='dashboard';
 let data={suppliers:[],payables:[],payments:[],income:[],expenses:[],receivables:[],receivablePayments:[],fuel:[]};
 const pages=[['dashboard','Visão geral'],['payables','Contas a pagar'],['suppliers','Fornecedores'],['income','Entradas'],['expenses','Saídas'],['debts','Mapa das dívidas'],['gasoline','⛽ Gasolina']];
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.remove('hidden');setTimeout(()=>el.classList.add('hidden'),2800)}
-async function boot(u){if(!u||u.id!==AUTH_USER_ID){await sb.auth.signOut();user=null;showAuth('Entre com a senha de acesso do Cris Financeiro.');return}user=u;const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp))page=hp;$('#auth').classList.add('hidden');$('#app').classList.remove('hidden');$('#logout').classList.remove('hidden');$('#todayLabel').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});navRender();await loadAll()}
+function toast(t){const el=$('#toast');if(!el)return;el.textContent=t;el.classList.remove('hidden');setTimeout(()=>el.classList.add('hidden'),2800)}
+function showAuth(msg=''){user=null;$('#app').classList.add('hidden');$('#auth').classList.remove('hidden');if(msg)$('#authMsg').textContent=msg;$('#authPass').value='';setTimeout(()=>$('#authPass').focus(),30)}
+function navRender(){const html=pages.map(p=>'<button type="button" data-page="'+p[0]+'" class="'+(page===p[0]?'active':'')+'">'+p[1]+'</button>').join('');$('#nav').innerHTML=html;$('#mobileNav').innerHTML=html;document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>{page=b.dataset.page;history.replaceState(null,'','#'+page);navRender();render()}))}
+async function boot(u){if(!u||u.id!==AUTH_USER_ID){await sb.auth.signOut();showAuth('Senha incorreta.');return}user=u;const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp))page=hp;$('#auth').classList.add('hidden');$('#app').classList.remove('hidden');$('#logout').classList.remove('hidden');$('#todayLabel').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});navRender();await loadAll()}
+$('#authForm').addEventListener('submit',async e=>{e.preventDefault();const password=$('#authPass').value.trim();if(!password){$('#authMsg').textContent='Digite a senha de acesso.';return}const btn=$('#authSubmit');btn.disabled=true;btn.textContent='Entrando...';$('#authMsg').textContent='Aguarde...';try{const res=await sb.auth.signInWithPassword({email:AUTH_EMAIL,password});if(res.error){$('#authMsg').textContent='Senha incorreta.';return}await boot(res.data.user)}catch(err){console.error(err);$('#authMsg').textContent='Não foi possível entrar. Tente novamente.'}finally{btn.disabled=false;btn.textContent='Entrar'}});
+
+$('#logout').addEventListener('click',async()=>{await sb.auth.signOut();showAuth('Você saiu do sistema.')});
+$('#refresh').addEventListener('click',loadAll);
+window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp)&&hp!==page){page=hp;navRender();render()}});
+sb.auth.onAuthStateChange(async(event,session)=>{if(session?.user&&event==='SIGNED_IN'){await boot(session.user)}if(!session&&event==='SIGNED_OUT'){showAuth()}});
+
 async function loadAll(){if(!user)return;const [s,p,pp,i,e,r,rp,f,d]=await Promise.all([sb.from('suppliers').select('*').order('name'),sb.from('accounts_payable').select('*').order('due_date'),sb.from('payments').select('*'),sb.from('income').select('*').order('occurred_at',{ascending:false}),sb.from('expenses').select('*').order('occurred_at',{ascending:false}),sb.from('accounts_receivable').select('*').order('due_date'),sb.from('receivable_payments').select('*'),sb.from('fuel_expenses').select('*').order('fueled_at',{ascending:false}),sb.from('debt_items').select('*').order('priority').order('due_date')]);for(const q of [s,p,pp,i,e,r,rp,f,d])if(q.error){toast(q.error.message);return}data={suppliers:s.data||[],payables:p.data||[],payments:pp.data||[],income:i.data||[],expenses:e.data||[],receivables:r.data||[],receivablePayments:rp.data||[],fuel:f.data||[],debts:d.data||[]};render()}
 function paidFor(id){return data.payments.filter(x=>x.payable_id===id).reduce((a,b)=>a+Number(b.amount),0)} function payableBal(p){return Math.max(0,Number(p.current_amount)-paidFor(p.id))} function receivedFor(id){return data.receivablePayments.filter(x=>x.receivable_id===id).reduce((a,b)=>a+Number(b.amount),0)}
 function effectiveStatus(p){const bal=payableBal(p);if(bal<=.005)return 'paid';if(paidFor(p.id)>0)return 'partial';if(p.due_date<isoToday())return 'overdue';return 'open'}
@@ -426,6 +449,6 @@ async function deleteFuel(id){
 }
 function daysLate(p,today){const d=new Date(p.due_date+'T12:00:00');return Math.floor((today-d)/86400000)}
 async function deleteRow(table,id,msg){if(!confirm(msg))return;const q=await sb.from(table).delete().eq('id',id);if(q.error)toast(q.error.message);else{toast('Excluído');await loadAll()}}
-await boot({id:'a7b397b7-55b9-41c6-8379-0a599c216377'});
+const {data:{session:initialSession}}=await sb.auth.getSession();if(initialSession?.user){await boot(initialSession.user)}else{showAuth()}
 </script>
 </body></html>

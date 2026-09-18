@@ -156,54 +156,47 @@ async function payModal(id){
   )
 }
 function renderPaidPayables(){
-  try{
-    const list=(data.payables||[]).filter(p=>effectiveStatus(p)==='paid');
-    const supplierOptions=(data.suppliers||[]).filter(s=>list.some(p=>String(p.supplier_id||'')===String(s.id))).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''))).map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+'</option>').join('');
-    const totalPaid=list.reduce((sum,p)=>sum+paidFor(p.id),0);
-    $('#content').innerHTML='<div class="grid cards">'+
-      '<div class="card metric ok"><div class="k">Boletos pagos</div><div class="v">'+list.length+'</div></div>'+
-      '<div class="card metric ok"><div class="k">Total pago</div><div class="v">'+money(totalPaid)+'</div></div>'+
-      '<div class="card metric"><div class="k">Fornecedores quitados</div><div class="v">'+new Set(list.map(p=>p.supplier_id||"sem")).size+'</div></div>'+
-      '</div>'+
-      '<div class="formbox">'+
-      '<div class="toolbar"><select id="paidSupplierFilter" class="field"><option value="">Todos os fornecedores</option>'+supplierOptions+'</select><input id="paidBillsSearch" class="field" placeholder="Buscar fornecedor, descrição ou nº do documento"><button id="clearPaidBills" class="btn secondary small" type="button">Limpar</button></div>'+
-      '<div class="section-title"><h3>Contas totalmente quitadas</h3><span id="paidBillsCount" class="pill">'+list.length+' encontrada(s)</span></div>'+
-      '<div id="paidBillsArea" class="list"></div></div>';
-
-    const area=$('#paidBillsArea'), count=$('#paidBillsCount'), search=$('#paidBillsSearch'), filter=$('#paidSupplierFilter');
-
-    const renderRows=items=>{
-      if(!items.length){area.innerHTML='<div class="empty">Ainda não há boletos pagos.</div>';return}
-      area.innerHTML=items.map(p=>{
-        const supplier=(data.suppliers||[]).find(s=>String(s.id)===String(p.supplier_id));
-        const ps=(data.payments||[]).filter(x=>x.payable_id===p.id).sort((a,b)=>String(a.paid_at||a.created_at||'').localeCompare(String(b.paid_at||b.created_at||'')));
-        const last=ps.length?ps[ps.length-1]:null;
-        const methods=[...new Set(ps.map(x=>String(x.method||'').trim()).filter(Boolean))].join(' · ')||'Forma não informada';
-        return '<div class="row"><div><div class="title">'+esc(supplier?supplier.name:'Sem fornecedor')+'</div><div class="sub">'+esc(p.description||'—')+(p.category?' · '+esc(p.category):'')+(p.document_number?' · Nº '+esc(p.document_number):'')+'</div></div><div class="datecol">'+dbr(last?last.paid_at||last.created_at:'')+'</div><div><div class="money">'+money(paidFor(p.id))+'</div><div class="sub">'+esc(methods)+'</div></div><div class="actions"><button class="btn secondary small" type="button" data-paid-history="'+p.id+'">Ver histórico</button></div></div>';
-      }).join('');
-      area.querySelectorAll('[data-paid-history]').forEach(b=>b.addEventListener('click',()=>paymentHistory(b.dataset.paidHistory)));
-    };
-
-    const applyFilters=()=>{
-      const q=String(search.value||'').trim().toLowerCase();
-      const sid=String(filter.value||'');
-      const filtered=list.filter(p=>{
-        const supplier=(data.suppliers||[]).find(s=>String(s.id)===String(p.supplier_id));
-        const hay=[supplier?supplier.name:'',p.description||'',p.document_number||'',p.category||''].join(' ').toLowerCase();
-        return (!sid||String(p.supplier_id||'')===sid)&&(!q||hay.includes(q));
-      });
-      count.textContent=filtered.length+' encontrada(s)';
-      renderRows(filtered);
-    };
-    search.addEventListener('input',applyFilters);
-    filter.addEventListener('change',applyFilters);
-    $('#clearPaidBills').addEventListener('click',()=>{search.value='';filter.value='';applyFilters()});
-    applyFilters();
-  }catch(err){
-    console.error('Boletos pagos:',err);
-    $('#content').innerHTML='<div class="notice"><strong>Não foi possível carregar Boletos Pagos.</strong>'+esc(err&&err.message?err.message:'Erro desconhecido')+'</div>';
+  const list=(data.payables||[]).filter(p=>effectiveStatus(p)==='paid');
+  const total=list.reduce((a,p)=>a+paidFor(p.id),0);
+  const suppliers=data.suppliers.filter(s=>list.some(p=>p.supplier_id===s.id)).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+  let html='<div class="grid cards">'+
+    '<div class="card metric ok"><div class="k">Boletos pagos</div><div class="v">'+list.length+'</div></div>'+
+    '<div class="card metric ok"><div class="k">Total pago</div><div class="v">'+money(total)+'</div></div>'+
+    '<div class="card metric"><div class="k">Fornecedores quitados</div><div class="v">'+new Set(list.map(p=>p.supplier_id||"sem")).size+'</div></div>'+
+    '</div>'+
+    '<div class="formbox"><div class="toolbar">'+
+    '<select id="paidSupplierFilter" class="field"><option value="">Todos os fornecedores</option>'+suppliers.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+'</option>').join('')+'</select>'+
+    '<input id="paidBillsSearch" class="field" placeholder="Buscar fornecedor, descrição ou nº do documento">'+
+    '<button id="clearPaidBills" class="btn secondary small" type="button">Limpar</button></div>'+
+    '<div class="section-title"><h3>Contas totalmente quitadas</h3><span id="paidBillsCount" class="pill">'+list.length+' encontrada(s)</span></div>'+
+    '<div id="paidBillsArea" class="list"></div></div>';
+  $('#content').innerHTML=html;
+  const area=$('#paidBillsArea'),count=$('#paidBillsCount'),search=$('#paidBillsSearch'),filter=$('#paidSupplierFilter');
+  function row(p){
+    const s=data.suppliers.find(x=>x.id===p.supplier_id);
+    const ps=data.payments.filter(x=>x.payable_id===p.id).sort((a,b)=>String(a.paid_at||a.created_at||'').localeCompare(String(b.paid_at||b.created_at||'')));
+    const last=ps.length?ps[ps.length-1]:null;
+    const methods=[...new Set(ps.map(x=>x.method).filter(Boolean))].join(' · ')||'Forma não informada';
+    return '<div class="row"><div><div class="title">'+esc(s?s.name:'Sem fornecedor')+'</div><div class="sub">'+esc(p.description||'—')+(p.category?' · '+esc(p.category):'')+(p.document_number?' · Nº '+esc(p.document_number):'')+'</div></div><div class="datecol">'+dbr(last?(last.paid_at||last.created_at):'')+'</div><div><div class="money">'+money(paidFor(p.id))+'</div><div class="sub">'+esc(methods)+'</div></div><div class="actions"><button class="btn secondary small" type="button" data-paid-history="'+p.id+'">Ver histórico</button></div></div>';
   }
+  function paint(){
+    const q=String(search.value||'').trim().toLowerCase();
+    const sid=String(filter.value||'');
+    const items=list.filter(p=>{
+      const s=data.suppliers.find(x=>x.id===p.supplier_id);
+      const hay=[s?s.name:'',p.description||'',p.document_number||'',p.category||''].join(' ').toLowerCase();
+      return (!sid||String(p.supplier_id||'')===sid)&&(!q||hay.indexOf(q)>=0);
+    });
+    count.textContent=items.length+' encontrada(s)';
+    area.innerHTML=items.length?items.map(row).join(''):'<div class="empty">Ainda não há boletos pagos.</div>';
+    area.querySelectorAll('[data-paid-history]').forEach(b=>b.addEventListener('click',()=>paymentHistory(b.dataset.paidHistory)));
+  }
+  search.addEventListener('input',paint);
+  filter.addEventListener('change',paint);
+  $('#clearPaidBills').addEventListener('click',()=>{search.value='';filter.value='';paint()});
+  paint();
 }
+
 function paymentHistory(id){
   const p=data.payables.find(x=>x.id===id);if(!p)return;
   const rows=data.payments.filter(x=>x.payable_id===id).sort((a,b)=>String(b.paid_at||'').localeCompare(String(a.paid_at||''))||String(b.created_at||'').localeCompare(String(a.created_at||'')));

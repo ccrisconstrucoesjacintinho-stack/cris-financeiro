@@ -77,7 +77,7 @@ const $=s=>document.querySelector(s); const money=v=>new Intl.NumberFormat('pt-B
 const dbr=d=>d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'—'; const isoToday=()=>new Date().toISOString().slice(0,10); const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let signup=false, user=null, page='dashboard';
 let data={suppliers:[],payables:[],payments:[],income:[],expenses:[],receivables:[],receivablePayments:[],fuel:[]};
-const pages=[['dashboard','Visão geral'],['payables','Contas a pagar'],['suppliers','Fornecedores'],['income','Entradas'],['expenses','Saídas'],['receivables','A receber'],['debts','Mapa das dívidas'],['gasoline','⛽ Gasolina']];
+const pages=[['dashboard','Visão geral'],['payables','Contas a pagar'],['paidpayables','Boletos pagos'],['suppliers','Fornecedores'],['income','Entradas'],['expenses','Saídas'],['receivables','A receber'],['debts','Mapa das dívidas'],['gasoline','⛽ Gasolina']];
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.remove('hidden');setTimeout(()=>el.classList.add('hidden'),2800)}
 function closeEditor(){const m=$('#editModal');m.classList.add('hidden');$('#editForm').onsubmit=null;$('#editSave').classList.remove('hidden');$('#editCancel').textContent='Cancelar'}
 function openEditor(title,html,onSave){$('#editTitle').textContent=title;$('#editBody').innerHTML=html;const m=$('#editModal'),form=$('#editForm'),save=$('#editSave');save.classList.remove('hidden');$('#editCancel').textContent='Cancelar';m.classList.remove('hidden');save.disabled=false;form.onsubmit=async e=>{e.preventDefault();save.disabled=true;save.textContent='Salvando...';try{const ok=await onSave(new FormData(form));if(ok!==false)closeEditor()}catch(err){console.error(err);toast('Não foi possível salvar as alterações.')}finally{save.disabled=false;save.textContent='Salvar alterações'}};setTimeout(()=>form.querySelector('input,select,textarea')?.focus(),30)}
@@ -92,7 +92,7 @@ async function boot(u){user=u;const hp=location.hash.replace('#','');if(pages.so
 async function loadAll(){if(!user)return;const [s,p,pp,i,e,r,rp,f,d]=await Promise.all([sb.from('suppliers').select('*').order('name'),sb.from('accounts_payable').select('*').order('due_date'),sb.from('payments').select('*'),sb.from('income').select('*').order('occurred_at',{ascending:false}),sb.from('expenses').select('*').order('occurred_at',{ascending:false}),sb.from('accounts_receivable').select('*').order('due_date'),sb.from('receivable_payments').select('*'),sb.from('fuel_expenses').select('*').order('fueled_at',{ascending:false}),sb.from('debt_items').select('*').order('priority').order('due_date')]);for(const q of [s,p,pp,i,e,r,rp,f,d])if(q.error){toast(q.error.message);return}data={suppliers:s.data||[],payables:p.data||[],payments:pp.data||[],income:i.data||[],expenses:e.data||[],receivables:r.data||[],receivablePayments:rp.data||[],fuel:f.data||[],debts:d.data||[]};render()}
 function paidFor(id){return data.payments.filter(x=>x.payable_id===id).reduce((a,b)=>a+Number(b.amount),0)} function payableBal(p){return Math.max(0,Number(p.current_amount)-paidFor(p.id))} function receivedFor(id){return data.receivablePayments.filter(x=>x.receivable_id===id).reduce((a,b)=>a+Number(b.amount),0)}
 function effectiveStatus(p){const bal=payableBal(p);if(bal<=.005)return 'paid';if(paidFor(p.id)>0)return 'partial';if(p.due_date<isoToday())return 'overdue';return 'open'}
-function render(){const meta=pages.find(p=>p[0]===page);$('#pageTitle').textContent=meta?meta[1]:'Financeiro';if(page==='dashboard')renderDashboard();if(page==='payables')renderPayables();if(page==='suppliers')renderSuppliers();if(page==='income')renderIncome();if(page==='expenses')renderExpenses();if(page==='receivables')renderReceivables();if(page==='debts')renderDebts();if(page==='gasoline')renderGasoline()}
+function render(){const meta=pages.find(p=>p[0]===page);$('#pageTitle').textContent=meta?meta[1]:'Financeiro';if(page==='dashboard')renderDashboard();if(page==='payables')renderPayables();if(page==='paidpayables')renderPaidPayables();if(page==='suppliers')renderSuppliers();if(page==='income')renderIncome();if(page==='expenses')renderExpenses();if(page==='receivables')renderReceivables();if(page==='debts')renderDebts();if(page==='gasoline')renderGasoline()}
 function monthKey(d){return String(d||'').slice(0,7)}
 function renderDashboard(){const now=new Date(),mk=now.toISOString().slice(0,7);const inc=data.income.filter(x=>monthKey(x.occurred_at)===mk).reduce((a,b)=>a+Number(b.amount),0)+data.receivablePayments.filter(x=>monthKey(x.received_at)===mk).reduce((a,b)=>a+Number(b.amount),0);const out=data.expenses.filter(x=>monthKey(x.occurred_at)===mk).reduce((a,b)=>a+Number(b.amount),0)+data.payments.filter(x=>monthKey(x.paid_at)===mk).reduce((a,b)=>a+Number(b.amount),0);const open=data.payables.reduce((a,p)=>a+payableBal(p),0);const overdue=data.payables.filter(p=>effectiveStatus(p)==='overdue').reduce((a,p)=>a+payableBal(p),0);const today=data.payables.filter(p=>p.due_date===isoToday()&&payableBal(p)>0).reduce((a,p)=>a+payableBal(p),0);const in7=new Date();in7.setDate(in7.getDate()+7);const in7s=in7.toISOString().slice(0,10);const next7=data.payables.filter(p=>p.due_date>=isoToday()&&p.due_date<=in7s&&payableBal(p)>0).reduce((a,p)=>a+payableBal(p),0);const recv=data.receivables.reduce((a,r)=>a+Math.max(0,Number(r.amount)-receivedFor(r.id)),0);const urgentCandidates=data.payables.filter(p=>payableBal(p)>0&&(p.due_date<=in7s));const urgentGroups=new Map();for(const p of urgentCandidates){const key=p.supplier_id||'__sem_fornecedor__';if(!urgentGroups.has(key))urgentGroups.set(key,[]);urgentGroups.get(key).push(p)}for(const arr of urgentGroups.values())arr.sort((a,b)=>a.due_date.localeCompare(b.due_date));const urgentQueues=[...urgentGroups.entries()].map(([key,arr])=>({key,arr})).sort((a,b)=>a.arr[0].due_date.localeCompare(b.arr[0].due_date));const urgent=[];let round=0;while(urgent.length<5){let added=false;for(const g of urgentQueues){if(g.arr[round]){urgent.push(g.arr[round]);added=true;if(urgent.length>=5)break}}if(!added)break;round++}let months=[];for(let k=5;k>=0;k--){const d=new Date(now.getFullYear(),now.getMonth()-k,1);months.push(d.toISOString().slice(0,7))}const vals=months.map(m=>({m,ins:data.income.filter(x=>monthKey(x.occurred_at)===m).reduce((a,b)=>a+Number(b.amount),0)+data.receivablePayments.filter(x=>monthKey(x.received_at)===m).reduce((a,b)=>a+Number(b.amount),0),outs:data.expenses.filter(x=>monthKey(x.occurred_at)===m).reduce((a,b)=>a+Number(b.amount),0)+data.payments.filter(x=>monthKey(x.paid_at)===m).reduce((a,b)=>a+Number(b.amount),0)}));const mx=Math.max(1,...vals.flatMap(v=>[v.ins,v.outs]));$('#content').innerHTML='<div class="grid cards">'+metric('Entradas do mês',inc,'ok')+metric('Saídas do mês',out,'')+metric('Resultado do mês',inc-out,inc-out>=0?'ok':'danger')+metric('Total em aberto',open,'warn')+metric('Total vencido',overdue,'danger')+metric('Vence hoje',today,today?'danger':'')+metric('Próximos 7 dias',next7,'warn')+metric('A receber',recv,'ok')+'</div><div class="grid two"><div class="card"><div class="section-title"><h3>Entradas x saídas</h3><span class="pill">últimos 6 meses</span></div><div class="chart">'+vals.map(v=>'<div><div class="bargrp"><span class="bar in" style="height:'+Math.max(2,v.ins/mx*140)+'px"></span><span class="bar out" style="height:'+Math.max(2,v.outs/mx*140)+'px"></span></div><div class="month">'+new Date(v.m+'-02').toLocaleDateString('pt-BR',{month:'short'})+'</div></div>').join('')+'</div><div style="font-size:12px;color:var(--muted)">Verde: entradas · Rosa: saídas</div></div><div class="card"><div class="section-title"><h3>Urgente agora</h3><span class="pill red">'+urgent.length+' conta(s)</span></div>'+payableList(urgent,true)+'</div></div><div class="card" style="margin-top:14px"><div class="section-title"><h3>Leitura rápida do caixa</h3></div><div class="notice"><strong>'+(inc-out>=0?'O mês está positivo até agora.':'As saídas do mês estão maiores que as entradas.')+'</strong>Resultado atual: '+money(inc-out)+'. Total ainda em aberto com fornecedores e contas: '+money(open)+'.</div></div>'}
 function metric(k,v,c){return '<div class="card metric '+c+'"><div class="k">'+k+'</div><div class="v">'+money(v)+'</div></div>'}
@@ -154,6 +154,55 @@ async function payModal(id){
       await loadAll();return true
     }
   )
+}
+function renderPaidPayables(){
+ const paidBills=(data.payables||[]).filter(p=>effectiveStatus(p)==='paid').sort((a,b)=>{
+   const la=Math.max(...(data.payments||[]).filter(x=>x.payable_id===a.id).map(x=>String(x.paid_at||x.created_at||'').length?new Date(x.paid_at||x.created_at).getTime():0),0);
+   const lb=Math.max(...(data.payments||[]).filter(x=>x.payable_id===b.id).map(x=>String(x.paid_at||x.created_at||'').length?new Date(x.paid_at||x.created_at).getTime():0),0);
+   return lb-la;
+ });
+ const supplierIds=[...new Set(paidBills.map(p=>p.supplier_id).filter(Boolean))];
+ const suppliers=supplierIds.map(id=>data.suppliers.find(s=>s.id===id)).filter(Boolean).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
+ const totalPaid=paidBills.reduce((sum,p)=>sum+paidFor(p.id),0);
+ const lastPaid=paidBills.reduce((latest,p)=>{
+   const dates=(data.payments||[]).filter(x=>x.payable_id===p.id).map(x=>x.paid_at||x.created_at).filter(Boolean);
+   const d=dates.sort().pop()||'';
+   return d>latest?d:latest;
+ },'');
+ const supplierCount=new Set(paidBills.map(p=>p.supplier_id||'__sem_fornecedor__')).size;
+ const supplierOptions=suppliers.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+'</option>').join('');
+ const rows=paidBills.map(p=>{
+   const supplier=data.suppliers.find(s=>s.id===p.supplier_id);
+   const payments=(data.payments||[]).filter(x=>x.payable_id===p.id).sort((a,b)=>String(a.paid_at||a.created_at||'').localeCompare(String(b.paid_at||b.created_at||'')));
+   const last=payments.length?payments[payments.length-1]:null;
+   const methods=[...new Set(payments.map(x=>String(x.method||'').trim()).filter(Boolean))];
+   const paid=paidFor(p.id);
+   return '<div class="row"><div><div class="title">'+esc(supplier?.name||'Sem fornecedor')+'</div><div class="sub">'+esc(p.description||'—')+(p.category?' · '+esc(p.category):'')+(p.document_number?' · Nº '+esc(p.document_number):'')+'</div></div><div class="datecol">'+dbr(last?.paid_at||last?.created_at||'')+'</div><div><div class="money">'+money(paid)+'</div><div class="sub" style="text-align:right">'+esc(methods.join(' · ')||'Forma não informada')+'</div></div><div class="actions"><button class="btn secondary small" data-paid-history="'+p.id+'">Ver histórico</button></div></div>';
+ }).join('');
+ $('#content').innerHTML='<div class="grid cards">'+metric('Boletos pagos',paidBills.length,'ok')+metric('Total pago',totalPaid,'ok')+'<div class="card metric"><div class="k">Última quitação</div><div class="v" style="font-size:20px">'+(lastPaid?esc(dbr(lastPaid)):'—')+'</div></div><div class="card metric"><div class="k">Fornecedores quitados</div><div class="v">'+supplierCount+'</div></div></div><div class="formbox"><div class="toolbar"><select id="paidSupplierFilter" class="field"><option value="">Todos os fornecedores</option>'+supplierOptions+'</select><input id="paidBillsSearch" class="field" placeholder="Buscar fornecedor, descrição ou nº do documento" /><button id="clearPaidBills" class="btn secondary small" type="button">Limpar</button></div><div class="section-title"><h3>Contas totalmente quitadas</h3><span id="paidBillsCount" class="pill">'+paidBills.length+' cadastrada(s)</span></div><div id="paidBillsArea" class="list"></div></div>';
+ const area=$('#paidBillsArea'),count=$('#paidBillsCount'),search=$('#paidBillsSearch'),filter=$('#paidSupplierFilter');
+ function paint(){
+   const q=(search?.value||'').trim().toLowerCase(),sid=filter?.value||'';
+   const filtered=paidBills.filter(p=>{
+     const supplier=data.suppliers.find(s=>s.id===p.supplier_id);
+     const hay=[supplier?.name,p.description,p.document_number,p.category].filter(Boolean).join(' ').toLowerCase();
+     return (!sid||String(p.supplier_id)===String(sid))&&(!q||hay.includes(q));
+   });
+   count.textContent=filtered.length+' encontrada(s)';
+   area.innerHTML=filtered.length?filtered.map(p=>rowsForPaid(p)).join(''):'<div class="empty">Nenhum boleto pago encontrado com esses filtros.</div>';
+   area.querySelectorAll('[data-paid-history]').forEach(b=>b.addEventListener('click',()=>paymentHistory(b.dataset.paidHistory)));
+ }
+ function rowsForPaid(p){
+   const supplier=data.suppliers.find(s=>s.id===p.supplier_id);
+   const payments=(data.payments||[]).filter(x=>x.payable_id===p.id).sort((a,b)=>String(a.paid_at||a.created_at||'').localeCompare(String(b.paid_at||b.created_at||'')));
+   const last=payments.length?payments[payments.length-1]:null;
+   const methods=[...new Set(payments.map(x=>String(x.method||'').trim()).filter(Boolean))];
+   return '<div class="row"><div><div class="title">'+esc(supplier?.name||'Sem fornecedor')+'</div><div class="sub">'+esc(p.description||'—')+(p.category?' · '+esc(p.category):'')+(p.document_number?' · Nº '+esc(p.document_number):'')+'</div></div><div class="datecol">'+dbr(last?.paid_at||last?.created_at||'')+'</div><div><div class="money">'+money(paidFor(p.id))+'</div><div class="sub" style="text-align:right">'+esc(methods.join(' · ')||'Forma não informada')+'</div></div><div class="actions"><button class="btn secondary small" data-paid-history="'+p.id+'">Ver histórico</button></div></div>';
+ }
+ area.innerHTML=paidBills.length?paidBills.map(p=>rowsForPaid(p)).join(''):'<div class="empty">Ainda não há boletos totalmente pagos.</div>';
+ area.querySelectorAll('[data-paid-history]').forEach(b=>b.addEventListener('click',()=>paymentHistory(b.dataset.paidHistory)));
+ search?.addEventListener('input',paint);filter?.addEventListener('change',paint);
+ $('#clearPaidBills')?.addEventListener('click',()=>{search.value='';filter.value='';paint()});
 }
 function paymentHistory(id){
   const p=data.payables.find(x=>x.id===id);if(!p)return;

@@ -37,12 +37,11 @@ label{display:block;font-size:12px;font-weight:700;margin:12px 0 6px}.field{widt
   <div class="auth-card">
     <div class="brand"><div class="logo">CF</div><div><h1>Cris Financeiro</h1><p>Acesso protegido</p></div></div>
     <form id="authForm">
-      <label>E-mail da conta</label><input id="authEmail" class="field" type="email" autocomplete="username" value="ccrisconstrucoesjacintinho@gmail.com" readonly />
-      <label>Senha de acesso</label><input id="authPass" class="field" type="password" minlength="6" autocomplete="current-password" required />
+      <label>Senha de acesso</label><input id="authPass" class="field" type="password" minlength="6" autocomplete="current-password" required autofocus />
       <button class="btn full" id="authSubmit" type="submit">Entrar</button>
     </form>
-    <div class="msg" id="authMsg">Seu acesso é protegido por autenticação do Supabase.</div>
-    <div style="text-align:center;margin-top:12px"><button id="resetAccess" class="linkbtn" type="button">Esqueci minha senha</button></div>
+    <div class="msg" id="authMsg">Uma única senha é usada para o acesso ao sistema.</div>
+    <div style="text-align:center;margin-top:12px"><button id="resetAccess" class="linkbtn" type="button">Definir / alterar senha</button></div>
     <div id="recoveryBox" class="hidden" style="margin-top:16px">
       <label>Nova senha</label><input id="newPass" class="field" type="password" minlength="6" autocomplete="new-password" />
       <label>Confirmar nova senha</label><input id="newPass2" class="field" type="password" minlength="6" autocomplete="new-password" />
@@ -94,6 +93,7 @@ window.addEventListener('unhandledrejection',function(e){
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 const SUPABASE_URL='https://nxjtninxbikekdcufdqz.supabase.co';
 const SUPABASE_KEY='sb_publishable_SOpFBEWN_nOMWFLsCpcKfA_akvfFFWG';
+const AUTH_EMAIL='ccrisconstrucoesjacintinho@gmail.com';
 const sb=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const $=s=>document.querySelector(s); const money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
 const dbr=d=>d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'—'; const isoToday=()=>new Date().toISOString().slice(0,10); const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
@@ -110,8 +110,8 @@ $('#editClose').addEventListener('click',closeEditor);$('#editCancel').addEventL
 function opts(items,current){return items.map(([v,l])=>'<option value="'+esc(v)+'" '+(String(v)===String(current??'')?'selected':'')+'>'+esc(l)+'</option>').join('')}
 
 function navRender(){const html=pages.map(p=>'<button type="button" data-page="'+p[0]+'" class="'+(page===p[0]?'active':'')+'">'+p[1]+'</button>').join('');$('#nav').innerHTML=html;$('#mobileNav').innerHTML=html;document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>{page=b.dataset.page;history.replaceState(null,'','#'+page);navRender();render()}))}
-$('#authForm').addEventListener('submit',async e=>{e.preventDefault();const email=$('#authEmail').value.trim(),password=$('#authPass').value;$('#authSubmit').disabled=true;$('#authMsg').textContent='Aguarde...';const res=await sb.auth.signInWithPassword({email,password});$('#authSubmit').disabled=false;if(res.error){$('#authMsg').textContent='Senha incorreta ou acesso indisponível.';return}await boot(res.data.user)});
-$('#resetAccess').addEventListener('click',async()=>{const email=$('#authEmail').value.trim();$('#resetAccess').disabled=true;const res=await sb.auth.resetPasswordForEmail(email);$('#resetAccess').disabled=false;$('#authMsg').textContent=res.error?'Não foi possível enviar o e-mail de redefinição.':'Enviamos um link de redefinição para o e-mail da conta.'});
+$('#authForm').addEventListener('submit',async e=>{e.preventDefault();const password=$('#authPass').value;$('#authSubmit').disabled=true;$('#authMsg').textContent='Aguarde...';const res=await sb.auth.signInWithPassword({email:AUTH_EMAIL,password});$('#authSubmit').disabled=false;if(res.error){$('#authMsg').textContent='Senha incorreta.';return}await boot(res.data.user)});
+$('#resetAccess').addEventListener('click',async()=>{$('#resetAccess').disabled=true;const res=await sb.auth.resetPasswordForEmail(AUTH_EMAIL);$('#resetAccess').disabled=false;$('#authMsg').textContent=res.error?'Não foi possível enviar o e-mail de redefinição.':'Enviamos o link de redefinição para o e-mail da conta.'});
 $('#saveNewPass').addEventListener('click',async()=>{const p1=$('#newPass').value,p2=$('#newPass2').value;if(!p1||p1.length<6){$('#authMsg').textContent='A nova senha precisa ter pelo menos 6 caracteres.';return}if(p1!==p2){$('#authMsg').textContent='As senhas não conferem.';return}const res=await sb.auth.updateUser({password:p1});if(res.error){$('#authMsg').textContent='Não foi possível atualizar a senha.';return}finishRecovery();await sb.auth.signOut()});
 $('#logout').addEventListener('click',async()=>{await sb.auth.signOut();location.reload()});$('#refresh').addEventListener('click',loadAll);window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp)&&hp!==page){page=hp;navRender();render()}});
 sb.auth.onAuthStateChange(async(event,session)=>{if(event==='PASSWORD_RECOVERY'){showRecovery();return}if(session?.user&&event==='SIGNED_IN'){await boot(session.user)}if(!session&&event==='SIGNED_OUT'){showAuth()}});

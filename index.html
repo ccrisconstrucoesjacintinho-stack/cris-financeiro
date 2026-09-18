@@ -28,21 +28,26 @@ label{display:block;font-size:12px;font-weight:700;margin:12px 0 6px}.field{widt
 .debt-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0}.debt-toolbar .field{width:auto;min-width:145px}.debt-toolbar .search{min-width:230px;flex:1}.debt-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:16px;background:#fff}.debt-table{width:100%;border-collapse:collapse;min-width:1020px}.debt-table th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);background:#faf9fa;position:sticky;top:0;z-index:1}.debt-table td{padding:12px;border-bottom:1px solid var(--line);vertical-align:middle;font-size:13px}.debt-table tr:last-child td{border-bottom:0}.debt-table .num{text-align:right;font-variant-numeric:tabular-nums}.debt-table .desc{font-weight:750}.debt-table .mini{font-size:11px;color:var(--muted);margin-top:3px}.debt-table-progress{min-width:140px}.debt-table-progress .track{height:8px;background:#eee9eb;border-radius:999px;overflow:hidden}.debt-table-progress .track span{display:block;height:100%;background:var(--rose);border-radius:999px}.debt-table-progress.done .track span{background:var(--ok)}.debt-table-progress .pct{font-size:11px;font-weight:750;margin-top:4px;color:var(--muted)}.debt-status{display:inline-flex;align-items:center;padding:5px 8px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}.debt-status.overdue{background:#ffe3e3;color:#e00000;border:1px solid #ffb8b8;box-shadow:0 0 0 1px rgba(224,0,0,.02)}.debt-status.partial{background:#eaf1fb;color:#2f66ad;border:1px solid #cbdcf4}.debt-status.open{background:#e8f8ee;color:#138a45;border:1px solid #bfe8ce}.debt-table tr.debt-row-overdue td{background:#fff5f5}.debt-table tr.debt-row-overdue td:first-child{box-shadow:inset 4px 0 0 #f01818}.debt-table tr.debt-row-open td{background:#f4fbf6}.debt-table tr.debt-row-open td:first-child{box-shadow:inset 4px 0 0 #20a75a}.debt-table tr.debt-row-partial td:first-child{box-shadow:inset 4px 0 0 #4c82c3}.debt-priority{font-size:11px;font-weight:750}.debt-priority.critical{color:var(--danger)}.debt-priority.high{color:var(--warn)}.debt-section-head{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:10px}.debt-section-head h3{margin:0}.debt-section-head p{margin:4px 0 0;font-size:12px;color:var(--muted)}
 @media(max-width:1200px){.debt-kpis{grid-template-columns:repeat(3,1fr)}}@media(max-width:800px){.debt-charts{grid-template-columns:1fr}.debt-chart-card.wide{grid-column:auto}.debt-kpis{grid-template-columns:1fr 1fr}.debt-chart-wrap{height:250px}.debt-toolbar .field,.debt-toolbar .search{width:100%;min-width:0}}@media(max-width:480px){.debt-kpis{grid-template-columns:1fr 1fr}.debt-kpi .value{font-size:18px}}
 
-#auth,#logout{display:none!important}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <div id="auth" class="auth">
   <div class="auth-card">
-    <div class="brand"><div class="logo">CF</div><div><h1>Cris Financeiro</h1><p>Organização financeira da loja</p></div></div>
+    <div class="brand"><div class="logo">CF</div><div><h1>Cris Financeiro</h1><p>Acesso protegido</p></div></div>
     <form id="authForm">
-      <label>E-mail</label><input id="authEmail" class="field" type="email" autocomplete="email" required />
-      <label>Senha</label><input id="authPass" class="field" type="password" minlength="6" autocomplete="current-password" required />
+      <label>E-mail da conta</label><input id="authEmail" class="field" type="email" autocomplete="username" value="ccrisconstrucoesjacintinho@gmail.com" readonly />
+      <label>Senha de acesso</label><input id="authPass" class="field" type="password" minlength="6" autocomplete="current-password" required />
       <button class="btn full" id="authSubmit" type="submit">Entrar</button>
     </form>
-    <div class="msg" id="authMsg"></div>
-    <div style="text-align:center;margin-top:12px"><button id="toggleAuth" class="linkbtn" type="button">Criar meu acesso</button></div>
+    <div class="msg" id="authMsg">Seu acesso é protegido por autenticação do Supabase.</div>
+    <div style="text-align:center;margin-top:12px"><button id="resetAccess" class="linkbtn" type="button">Esqueci minha senha</button></div>
+    <div id="recoveryBox" class="hidden" style="margin-top:16px">
+      <label>Nova senha</label><input id="newPass" class="field" type="password" minlength="6" autocomplete="new-password" />
+      <label>Confirmar nova senha</label><input id="newPass2" class="field" type="password" minlength="6" autocomplete="new-password" />
+      <button id="saveNewPass" class="btn full" type="button">Salvar nova senha</button>
+    </div>
   </div>
 </div>
 <div id="app" class="app">
@@ -89,23 +94,29 @@ window.addEventListener('unhandledrejection',function(e){
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 const SUPABASE_URL='https://nxjtninxbikekdcufdqz.supabase.co';
 const SUPABASE_KEY='sb_publishable_SOpFBEWN_nOMWFLsCpcKfA_akvfFFWG';
-const sb=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+const sb=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 const $=s=>document.querySelector(s); const money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
 const dbr=d=>d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'—'; const isoToday=()=>new Date().toISOString().slice(0,10); const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let signup=false, user=null, page='dashboard';
 let data={suppliers:[],payables:[],payments:[],income:[],expenses:[],receivables:[],receivablePayments:[],fuel:[]};
 const pages=[['dashboard','Visão geral'],['payables','Contas a pagar'],['suppliers','Fornecedores'],['income','Entradas'],['expenses','Saídas'],['debts','Mapa das dívidas'],['gasoline','⛽ Gasolina']];
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.remove('hidden');setTimeout(()=>el.classList.add('hidden'),2800)}
+function showAuth(msg=''){ $('#app').classList.add('hidden'); $('#auth').classList.remove('hidden'); $('#logout').classList.add('hidden'); if(msg) $('#authMsg').textContent=msg; $('#authPass').value=''; $('#authPass').focus() }
+function showRecovery(){ $('#app').classList.add('hidden'); $('#auth').classList.remove('hidden'); $('#authForm').classList.add('hidden'); $('#resetAccess').classList.add('hidden'); $('#recoveryBox').classList.remove('hidden'); $('#authMsg').textContent='Defina uma nova senha para continuar.'; }
+function finishRecovery(){ $('#authForm').classList.remove('hidden'); $('#resetAccess').classList.remove('hidden'); $('#recoveryBox').classList.add('hidden'); $('#newPass').value=''; $('#newPass2').value=''; $('#authMsg').textContent='Senha atualizada. Entre novamente.'; }
 function closeEditor(){const m=$('#editModal');m.classList.add('hidden');$('#editForm').onsubmit=null;$('#editSave').classList.remove('hidden');$('#editCancel').textContent='Cancelar'}
 function openEditor(title,html,onSave){$('#editTitle').textContent=title;$('#editBody').innerHTML=html;const m=$('#editModal'),form=$('#editForm'),save=$('#editSave');save.classList.remove('hidden');$('#editCancel').textContent='Cancelar';m.classList.remove('hidden');save.disabled=false;form.onsubmit=async e=>{e.preventDefault();save.disabled=true;save.textContent='Salvando...';try{const ok=await onSave(new FormData(form));if(ok!==false)closeEditor()}catch(err){console.error(err);toast('Não foi possível salvar as alterações.')}finally{save.disabled=false;save.textContent='Salvar alterações'}};setTimeout(()=>form.querySelector('input,select,textarea')?.focus(),30)}
 $('#editClose').addEventListener('click',closeEditor);$('#editCancel').addEventListener('click',closeEditor);$('#editModal').addEventListener('click',e=>{if(e.target.id==='editModal')closeEditor()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#editModal').classList.contains('hidden'))closeEditor()});
 function opts(items,current){return items.map(([v,l])=>'<option value="'+esc(v)+'" '+(String(v)===String(current??'')?'selected':'')+'>'+esc(l)+'</option>').join('')}
 
 function navRender(){const html=pages.map(p=>'<button type="button" data-page="'+p[0]+'" class="'+(page===p[0]?'active':'')+'">'+p[1]+'</button>').join('');$('#nav').innerHTML=html;$('#mobileNav').innerHTML=html;document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>{page=b.dataset.page;history.replaceState(null,'','#'+page);navRender();render()}))}
-$('#toggleAuth').addEventListener('click',()=>{signup=!signup;$('#authSubmit').textContent=signup?'Criar acesso':'Entrar';$('#toggleAuth').textContent=signup?'Já tenho acesso':'Criar meu acesso';$('#authMsg').textContent=signup?'Use um e-mail que você consiga acessar.':' '});
-$('#authForm').addEventListener('submit',async e=>{e.preventDefault();const email=$('#authEmail').value.trim(),password=$('#authPass').value;$('#authSubmit').disabled=true;$('#authMsg').textContent='Aguarde...';let res;if(signup)res=await sb.auth.signUp({email,password});else res=await sb.auth.signInWithPassword({email,password});$('#authSubmit').disabled=false;if(res.error){$('#authMsg').textContent=res.error.message;return}if(signup&&!res.data.session){$('#authMsg').textContent='Acesso criado. Confira seu e-mail para confirmar e depois volte para entrar.';return}await boot(res.data.user)});
+$('#authForm').addEventListener('submit',async e=>{e.preventDefault();const email=$('#authEmail').value.trim(),password=$('#authPass').value;$('#authSubmit').disabled=true;$('#authMsg').textContent='Aguarde...';const res=await sb.auth.signInWithPassword({email,password});$('#authSubmit').disabled=false;if(res.error){$('#authMsg').textContent='Senha incorreta ou acesso indisponível.';return}await boot(res.data.user)});
+$('#resetAccess').addEventListener('click',async()=>{const email=$('#authEmail').value.trim();$('#resetAccess').disabled=true;const res=await sb.auth.resetPasswordForEmail(email);$('#resetAccess').disabled=false;$('#authMsg').textContent=res.error?'Não foi possível enviar o e-mail de redefinição.':'Enviamos um link de redefinição para o e-mail da conta.'});
+$('#saveNewPass').addEventListener('click',async()=>{const p1=$('#newPass').value,p2=$('#newPass2').value;if(!p1||p1.length<6){$('#authMsg').textContent='A nova senha precisa ter pelo menos 6 caracteres.';return}if(p1!==p2){$('#authMsg').textContent='As senhas não conferem.';return}const res=await sb.auth.updateUser({password:p1});if(res.error){$('#authMsg').textContent='Não foi possível atualizar a senha.';return}finishRecovery();await sb.auth.signOut()});
 $('#logout').addEventListener('click',async()=>{await sb.auth.signOut();location.reload()});$('#refresh').addEventListener('click',loadAll);window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp)&&hp!==page){page=hp;navRender();render()}});
-async function boot(u){user=u;const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp))page=hp;$('#auth').classList.add('hidden');$('#app').classList.remove('hidden');$('#logout').classList.add('hidden');$('#todayLabel').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});navRender();await loadAll()}
+sb.auth.onAuthStateChange(async(event,session)=>{if(event==='PASSWORD_RECOVERY'){showRecovery();return}if(session?.user&&event==='SIGNED_IN'){await boot(session.user)}if(!session&&event==='SIGNED_OUT'){showAuth()}});
+
+async function boot(u){user=u;const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp))page=hp;$('#auth').classList.add('hidden');$('#app').classList.remove('hidden');$('#logout').classList.remove('hidden');$('#todayLabel').textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});navRender();await loadAll()}
 async function loadAll(){if(!user)return;const [s,p,pp,i,e,r,rp,f,d]=await Promise.all([sb.from('suppliers').select('*').order('name'),sb.from('accounts_payable').select('*').order('due_date'),sb.from('payments').select('*'),sb.from('income').select('*').order('occurred_at',{ascending:false}),sb.from('expenses').select('*').order('occurred_at',{ascending:false}),sb.from('accounts_receivable').select('*').order('due_date'),sb.from('receivable_payments').select('*'),sb.from('fuel_expenses').select('*').order('fueled_at',{ascending:false}),sb.from('debt_items').select('*').order('priority').order('due_date')]);for(const q of [s,p,pp,i,e,r,rp,f,d])if(q.error){toast(q.error.message);return}data={suppliers:s.data||[],payables:p.data||[],payments:pp.data||[],income:i.data||[],expenses:e.data||[],receivables:r.data||[],receivablePayments:rp.data||[],fuel:f.data||[],debts:d.data||[]};render()}
 function paidFor(id){return data.payments.filter(x=>x.payable_id===id).reduce((a,b)=>a+Number(b.amount),0)} function payableBal(p){return Math.max(0,Number(p.current_amount)-paidFor(p.id))} function receivedFor(id){return data.receivablePayments.filter(x=>x.receivable_id===id).reduce((a,b)=>a+Number(b.amount),0)}
 function effectiveStatus(p){const bal=payableBal(p);if(bal<=.005)return 'paid';if(paidFor(p.id)>0)return 'partial';if(p.due_date<isoToday())return 'overdue';return 'open'}
@@ -445,6 +456,6 @@ async function deleteFuel(id){
 }
 function daysLate(p,today){const d=new Date(p.due_date+'T12:00:00');return Math.floor((today-d)/86400000)}
 async function deleteRow(table,id,msg){if(!confirm(msg))return;const q=await sb.from(table).delete().eq('id',id);if(q.error)toast(q.error.message);else{toast('Excluído');await loadAll()}}
-const cfg=await sb.from('app_config').select('owner_id').eq('id',1).single();if(cfg.error||!cfg.data?.owner_id){document.body.innerHTML='<div style="font-family:system-ui;padding:28px"><h2>Não foi possível abrir o Cris Financeiro</h2><p>'+esc(cfg.error?.message||'Configuração da loja não encontrada.')+'</p></div>'}else{await boot({id:cfg.data.owner_id})}
+const {data:{session:initialSession}}=await sb.auth.getSession();if(initialSession?.user){await boot(initialSession.user)}else{showAuth()}
 </script>
 </body></html>

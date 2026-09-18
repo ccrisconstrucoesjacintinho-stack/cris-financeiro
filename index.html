@@ -94,7 +94,7 @@ const $=s=>document.querySelector(s); const money=v=>new Intl.NumberFormat('pt-B
 const dbr=d=>d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'—'; const isoToday=()=>new Date().toISOString().slice(0,10); const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let signup=false, user=null, page='dashboard';
 let data={suppliers:[],payables:[],payments:[],income:[],expenses:[],receivables:[],receivablePayments:[],fuel:[]};
-const pages=[['dashboard','Visão geral'],['payables','Contas a pagar'],['paidpayables','Boletos pagos'],['suppliers','Fornecedores'],['income','Entradas'],['expenses','Saídas'],['receivables','A receber'],['debts','Mapa das dívidas'],['gasoline','⛽ Gasolina']];
+const pages=[['dashboard','Visão geral'],['payables','Contas a pagar'],['suppliers','Fornecedores'],['income','Entradas'],['expenses','Saídas'],['receivables','A receber'],['debts','Mapa das dívidas'],['gasoline','⛽ Gasolina']];
 function toast(t){const el=$('#toast');el.textContent=t;el.classList.remove('hidden');setTimeout(()=>el.classList.add('hidden'),2800)}
 function closeEditor(){const m=$('#editModal');m.classList.add('hidden');$('#editForm').onsubmit=null;$('#editSave').classList.remove('hidden');$('#editCancel').textContent='Cancelar'}
 function openEditor(title,html,onSave){$('#editTitle').textContent=title;$('#editBody').innerHTML=html;const m=$('#editModal'),form=$('#editForm'),save=$('#editSave');save.classList.remove('hidden');$('#editCancel').textContent='Cancelar';m.classList.remove('hidden');save.disabled=false;form.onsubmit=async e=>{e.preventDefault();save.disabled=true;save.textContent='Salvando...';try{const ok=await onSave(new FormData(form));if(ok!==false)closeEditor()}catch(err){console.error(err);toast('Não foi possível salvar as alterações.')}finally{save.disabled=false;save.textContent='Salvar alterações'}};setTimeout(()=>form.querySelector('input,select,textarea')?.focus(),30)}
@@ -115,8 +115,61 @@ function renderDashboard(){const now=new Date(),mk=now.toISOString().slice(0,7);
 function metric(k,v,c){return '<div class="card metric '+c+'"><div class="k">'+k+'</div><div class="v">'+money(v)+'</div></div>'}
 function payableList(arr,compact){if(!arr.length)return '<div class="empty">Nenhuma conta aqui.</div>';return '<div class="list">'+arr.map(p=>{const s=data.suppliers.find(x=>x.id===p.supplier_id);const st=effectiveStatus(p),total=Number(p.current_amount||0),paid=paidFor(p.id),bal=payableBal(p),pct=total?Math.min(100,Math.max(0,paid/total*100)):0;const rowClass=st==='overdue'?'payable-overdue':st==='partial'?'payable-partial':st==='paid'?'':'payable-open';const stLabel=st==='overdue'?'Vencida':st==='partial'?'Parcialmente paga':st==='paid'?'Paga':'Em dia';return '<div class="row '+rowClass+'"><div><div class="title">'+esc(p.description)+'</div><div class="sub">'+esc(s?s.name:'Sem fornecedor')+' · <span class="status-inline '+st+'">'+stLabel+'</span></div></div><div class="datecol"><div class="sub">Vencimento</div><strong>'+dbr(p.due_date)+'</strong></div><div class="money"><div class="sub">Falta pagar</div>'+money(bal)+'</div>'+(compact?'':'<div class="actions">'+(bal>0?'<button class="btn small" data-pay="'+p.id+'">Registrar pagamento</button>':'')+'<button class="btn secondary small" data-history="'+p.id+'">Histórico</button><button class="btn secondary small" data-editpay="'+p.id+'">Editar</button><button class="btn danger small" data-delpay="'+p.id+'">Excluir</button></div>')+'<div class="pay-progress-wrap"><div class="pay-progress-top"><span>Progresso do pagamento</span><strong>'+pct.toFixed(0)+'%</strong></div><div class="pay-progress '+(pct>=99.995?'complete':'')+'"><span style="width:'+pct+'%"></span></div><div class="pay-amounts"><span class="paid">Já pago: '+money(paid)+'</span><span class="remaining">Total: '+money(total)+'</span></div></div></div>'}).join('')+'</div>'}
 function payableMatchesSearch(p,q){q=String(q||'').trim().toLocaleLowerCase('pt-BR');if(!q)return true;const s=data.suppliers.find(x=>x.id===p.supplier_id);const st=effectiveStatus(p),stLabel=st==='overdue'?'vencida vencido atrasada atrasado':st==='partial'?'parcial parcialmente paga':st==='paid'?'paga pago quitada quitado':'em dia aberta aberto';const priority={normal:'normal',high:'alta alto',critical:'crítica critico crítico',low:'baixa baixo'}[p.priority]||p.priority||'';const hay=[s?.name,p.description,p.document_number,p.notes,p.category,priority,p.due_date,stLabel,Number(p.current_amount||0).toFixed(2)].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR');return hay.includes(q)}
-function updatePayablesSearch(){const input=$('#payableSearch');if(!input)return;const q=input.value,filtered=data.payables.filter(p=>payableMatchesSearch(p,q));const area=$('#payablesListArea'),count=$('#payableSearchCount');if(count)count.textContent=q.trim()?filtered.length+' encontrada(s)':data.payables.length+' cadastrada(s)';if(area)area.innerHTML=payableList(filtered,false);bindPayableEvents()}
-function renderPayables(){const opts=data.suppliers.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join('');$('#content').innerHTML='<div class="formbox"><div class="section-title"><h3>Novo boleto / conta</h3><span class="pill">fornecedor</span></div><form id="payableForm"><div class="formgrid"><div><label>Fornecedor</label><select class="field" name="supplier_id"><option value="">Sem fornecedor</option>'+opts+'</select></div><div class="span2"><label>Descrição</label><input class="field" name="description" required placeholder="Ex.: compra de cimento" /></div><div><label>Valor</label><input class="field" name="amount" type="number" min="0.01" step="0.01" required /></div><div><label>Vencimento</label><input class="field" name="due_date" type="date" required /></div><div><label>Categoria</label><select class="field" name="category"><option>Fornecedor</option><option>Imposto</option><option>Despesa fixa</option><option>Dívida</option><option>Empréstimo</option><option>Outros</option></select></div><div><label>Prioridade</label><select class="field" name="priority"><option value="normal">Normal</option><option value="high">Alta</option><option value="critical">Crítica</option><option value="low">Baixa</option></select></div><div><label>Nº boleto/documento</label><input class="field" name="document_number" /></div><div><label>Anexar boleto (opcional)</label><input class="field" name="file" type="file" accept="image/*,.pdf" /></div><div class="span3"><label>Observação</label><textarea class="field" name="notes"></textarea></div></div><div class="form-actions"><button class="btn" type="submit">Salvar conta</button></div></form></div><div class="section-title"><h3>Contas cadastradas</h3><span class="pill red">'+data.payables.filter(p=>payableBal(p)>0).length+' em aberto</span></div><div class="toolbar" style="align-items:center"><input id="payableSearch" class="field" style="min-width:280px;flex:1" type="search" placeholder="🔎 Pesquisar fornecedor, conta, nº do boleto, observação..." autocomplete="off" /><button id="clearPayableSearch" class="btn secondary small" type="button">Limpar</button><span id="payableSearchCount" class="pill">'+data.payables.length+' cadastrada(s)</span></div><div id="payablesListArea">'+payableList(data.payables,false)+'</div>';bindPayableEvents();$('#payableForm').addEventListener('submit',savePayable);$('#payableSearch').addEventListener('input',updatePayablesSearch);$('#clearPayableSearch').addEventListener('click',()=>{$('#payableSearch').value='';updatePayablesSearch();$('#payableSearch').focus()})}
+function updatePayablesSearch(){cfunction payableTabMatch(p,tab){
+  const st=effectiveStatus(p);
+  const due=String(p.due_date||'');
+  const today=isoToday();
+  if(tab==='paid') return st==='paid';
+  if(st==='paid') return false;
+  if(tab==='overdue') return due<today;
+  if(tab==='ontime') return due===today;
+  if(tab==='upcoming') return due>today;
+  return true;
+}
+function payableTabLabel(tab){
+  return tab==='overdue'?'Vencidas':tab==='ontime'?'Em dia':tab==='upcoming'?'A vencer':tab==='paid'?'Pagas':'Todas';
+}
+function payableTabCount(tab){
+  return data.payables.filter(p=>payableTabMatch(p,tab)).length;
+}
+function updatePayablesSearch(){
+  const input=$('#payableSearch');
+  const tabs=$('#payableTabs');
+  if(!input||!tabs)return;
+  const q=input.value;
+  const tab=tabs.dataset.tab||'all';
+  const filtered=data.payables.filter(p=>payableTabMatch(p,tab)&&payableMatchesSearch(p,q));
+  const area=$('#payablesListArea'),count=$('#payableSearchCount');
+  if(count)count.textContent=q.trim()?filtered.length+' encontrada(s)':filtered.length+' conta(s)';
+  if(area)area.innerHTML=payableList(filtered,false);
+  bindPayableEvents();
+}
+function renderPayables(){
+  const opts=data.suppliers.map(s=>'<option value="'+s.id+'">'+esc(s.name)+'</option>').join('');
+  const tabs=['all','overdue','ontime','upcoming','paid'];
+  $('#content').innerHTML=
+    '<div class="formbox"><div class="section-title"><h3>Novo boleto / conta</h3><span class="pill">fornecedor</span></div><form id="payableForm"><div class="formgrid"><div><label>Fornecedor</label><select class="field" name="supplier_id"><option value="">Sem fornecedor</option>'+opts+'</select></div><div class="span2"><label>Descrição</label><input class="field" name="description" required placeholder="Ex.: compra de cimento" /></div><div><label>Valor</label><input class="field" name="amount" type="number" min="0.01" step="0.01" required /></div><div><label>Vencimento</label><input class="field" name="due_date" type="date" required /></div><div><label>Categoria</label><select class="field" name="category"><option>Fornecedor</option><option>Imposto</option><option>Despesa fixa</option><option>Dívida</option><option>Empréstimo</option><option>Outros</option></select></div><div><label>Prioridade</label><select class="field" name="priority"><option value="normal">Normal</option><option value="high">Alta</option><option value="critical">Crítica</option><option value="low">Baixa</option></select></div><div><label>Nº boleto/documento</label><input class="field" name="document_number" /></div><div><label>Anexar boleto (opcional)</label><input class="field" name="file" type="file" accept="image/*,.pdf" /></div><div class="span3"><label>Observação</label><textarea class="field" name="notes"></textarea></div></div><div class="form-actions"><button class="btn" type="submit">Salvar conta</button></div></form></div>'+
+    '<div class="section-title"><h3>Contas a pagar</h3><span class="pill">'+data.payables.filter(p=>effectiveStatus(p)!=='paid').length+' em aberto</span></div>'+
+    '<div id="payableTabs" data-tab="all" class="toolbar" style="margin-bottom:10px">'+
+      tabs.map(t=>'<button type="button" class="btn '+(t==='all'?'':'secondary')+' small" data-pay-tab="'+t+'">'+payableTabLabel(t)+' <span class="pill" style="margin-left:4px">'+payableTabCount(t)+'</span></button>').join('')+
+    '</div>'+
+    '<div class="toolbar" style="align-items:center"><input id="payableSearch" class="field" style="min-width:280px;flex:1" type="search" placeholder="🔎 Pesquisar fornecedor, conta, nº do boleto, observação..." autocomplete="off" /><button id="clearPayableSearch" class="btn secondary small" type="button">Limpar</button><span id="payableSearchCount" class="pill"></span></div>'+
+    '<div id="payablesListArea">'+payableList(data.payables.filter(p=>payableTabMatch(p,'all')),false)+'</div>';
+  bindPayableEvents();
+  $('#payableForm').addEventListener('submit',savePayable);
+  $('#payableSearch').addEventListener('input',updatePayablesSearch);
+  $('#clearPayableSearch').addEventListener('click',()=>{$('#payableSearch').value='';updatePayablesSearch();$('#payableSearch').focus()});
+  document.querySelectorAll('[data-pay-tab]').forEach(btn=>btn.addEventListener('click',()=>{
+    const tabsEl=$('#payableTabs');
+    tabsEl.dataset.tab=btn.dataset.payTab;
+    document.querySelectorAll('[data-pay-tab]').forEach(b=>{
+      const active=b.dataset.payTab===btn.dataset.payTab;
+      b.classList.toggle('secondary',!active);
+    });
+    updatePayablesSearch();
+  }));
+  updatePayablesSearch();
+}
 async function savePayable(e){e.preventDefault();const f=new FormData(e.target),amount=Number(f.get('amount'));let attachment_path=null;const file=f.get('file');if(file&&file.size){attachment_path=user.id+'/'+crypto.randomUUID()+'-'+file.name.replace(/[^a-zA-Z0-9._-]/g,'_');const up=await sb.storage.from('financeiro').upload(attachment_path,file);if(up.error){toast('Erro ao anexar: '+up.error.message);return}}const obj={user_id:user.id,supplier_id:f.get('supplier_id')||null,description:f.get('description'),document_number:f.get('document_number')||null,category:f.get('category'),original_amount:amount,current_amount:amount,due_date:f.get('due_date'),priority:f.get('priority'),notes:f.get('notes')||null,attachment_path};const q=await sb.from('accounts_payable').insert(obj);if(q.error)toast(q.error.message);else{toast('Conta salva');await loadAll()}}
 function bindPayableEvents(){document.querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>payModal(b.dataset.pay)));document.querySelectorAll('[data-history]').forEach(b=>b.addEventListener('click',()=>paymentHistory(b.dataset.history)));document.querySelectorAll('[data-delpay]').forEach(b=>b.addEventListener('click',()=>deleteRow('accounts_payable',b.dataset.delpay,'Excluir esta conta?')));document.querySelectorAll('[data-editpay]').forEach(b=>b.addEventListener('click',()=>editPayable(b.dataset.editpay)))}
 async function syncPayableStatus(id){const p=data.payables.find(x=>x.id===id);if(!p)return;const {data:rows,error}=await sb.from('payments').select('amount').eq('payable_id',id);if(error){toast(error.message);return}const paid=(rows||[]).reduce((a,b)=>a+Number(b.amount||0),0),total=Number(p.current_amount||0),status=paid>=total-.005?'paid':paid>0?'partial':(p.due_date<isoToday()?'overdue':'open');const q=await sb.from('accounts_payable').update({status}).eq('id',id);if(q.error)toast(q.error.message)}

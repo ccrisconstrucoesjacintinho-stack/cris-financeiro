@@ -45,7 +45,7 @@ label{display:block;font-size:12px;font-weight:700;margin:12px 0 6px}.field{widt
     <div style="text-align:center;margin-top:12px"><button id="toggleAuth" class="linkbtn" type="button">Criar meu acesso</button></div>
   </div>
 </div>
-<div id="app" class="app hidden">
+<div id="app" class="app">
   <aside class="sidebar">
     <div class="navbrand"><strong>Cris Financeiro</strong><span>Controle da loja</span></div>
     <nav class="nav" id="nav"></nav>
@@ -68,6 +68,23 @@ label{display:block;font-size:12px;font-weight:700;margin:12px 0 6px}.field{widt
   </div>
 </div>
 
+<script>
+window.addEventListener('error',function(e){
+  var box=document.getElementById('runtimeError');
+  if(box){
+    box.style.display='block';
+    box.textContent='Erro ao abrir o sistema: '+(e.message||'erro desconhecido');
+  }
+});
+window.addEventListener('unhandledrejection',function(e){
+  var box=document.getElementById('runtimeError');
+  if(box){
+    box.style.display='block';
+    box.textContent='Erro ao carregar o sistema: '+(e.reason&&e.reason.message?e.reason.message:String(e.reason||'erro desconhecido'));
+  }
+});
+</script>
+<div id="runtimeError" style="display:none;position:fixed;left:16px;right:16px;bottom:16px;z-index:99999;background:#fff3cd;color:#6b4e00;border:1px solid #e0c56e;border-radius:12px;padding:12px 14px;font:14px system-ui;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
 <script type="module">
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 const SUPABASE_URL='https://nxjtninxbikekdcufdqz.supabase.co';

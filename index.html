@@ -340,12 +340,11 @@ async function payModal(id){
       const amount=Number(f.get('amount'));
       if(!amount||amount<=0||amount>bal+.005){toast('Informe um valor entre R$ 0,01 e '+money(bal)+'.');return false}
       const files=f.getAll('receipt_file');
-      if(file&&file.size&&!validReceiptFile(file))return false;
       let attachment_path=null;
       try{attachment_path=attachmentValue(await uploadAttachmentFiles(files,user.id+'/pagamentos/'+id))}catch(err){if(err.message==='__VALIDATION__')return false;toast('Erro ao anexar comprovante: '+err.message);return false}
       const payload={user_id:user.id,payable_id:id,amount,paid_at:f.get('paid_at'),method:f.get('method')||null,source_account:String(f.get('source_account')||'').trim()||null,notes:String(f.get('notes')||'').trim()||null,attachment_path};
       const q=await sb.from('payments').insert(payload);
-      if(q.error){if(attachment_path)await sb.storage.from('financeiro').remove([attachment_path]);toast(q.error.message);return false}
+      if(q.error){if(attachment_path)await sb.storage.from('financeiro').remove(attachmentPaths(attachment_path));toast(q.error.message);return false}
       await syncPayableStatus(id);
       toast(amount>=bal-.005?'Conta quitada e comprovante salvo!':'Pagamento parcial registrado');
       await loadAll();return true
@@ -408,7 +407,7 @@ function paymentHistory(id){
     const payment=data.payments.find(x=>x.id===b.dataset.delpayment);
     const q=await sb.from('payments').delete().eq('id',b.dataset.delpayment);
     if(q.error){toast(q.error.message);return}
-    if(payment?.attachment_path)await sb.storage.from('financeiro').remove([payment.attachment_path]);
+    if(payment?.attachment_path)await sb.storage.from('financeiro').remove(attachmentPaths(payment.attachment_path));
     await syncPayableStatus(payment.payable_id);toast('Pagamento excluído e saldo recalculado');closeEditor();await loadAll()
   }))
 }
@@ -427,11 +426,11 @@ function editPayment(paymentId){
     '<div class="span3"><label>Observação</label><input class="field" name="notes" value="'+esc(x.notes||'')+'" /></div>',
     async f=>{
       const amount=Number(f.get('amount'));if(!amount||amount<=0||amount>max+.005){toast('Valor inválido. O máximo para este pagamento é '+money(max)+'.');return false}
-      const files=f.getAll('receipt_file');if(file&&file.size&&!validReceiptFile(file))return false;
-      const oldPath=x.attachment_path||null,remove=f.get('remove_receipt')==='on';let newPath=null,attachment_path=remove?null:oldPath;
+      const files=f.getAll('receipt_file');
+      const oldPaths=attachmentPaths(x.attachment_path),remove=f.get('remove_receipt')==='on';let newPaths=[],attachment_path=remove?null:x.attachment_path;
       if(files.some(v=>v&&v.size)){try{newPaths=await uploadAttachmentFiles(files,user.id+'/pagamentos/'+p.id);attachment_path=attachmentValue(newPaths)}catch(err){if(err.message==='__VALIDATION__')return false;toast('Erro ao anexar comprovante: '+err.message);return false}}
       const q=await sb.from('payments').update({amount,paid_at:f.get('paid_at'),method:f.get('method')||null,source_account:String(f.get('source_account')||'').trim()||null,notes:String(f.get('notes')||'').trim()||null,attachment_path}).eq('id',paymentId);
-      if(q.error){if(newPath)await sb.storage.from('financeiro').remove([newPath]);toast(q.error.message);return false}
+      if(q.error){if(newPaths.length)await sb.storage.from('financeiro').remove(newPaths);toast(q.error.message);return false}
       if(remove&&oldPaths.length)await sb.storage.from('financeiro').remove(oldPaths);
       await syncPayableStatus(p.id);toast('Pagamento atualizado');await loadAll();return true
     }
@@ -544,18 +543,18 @@ function renderGasoline(){
  document.querySelectorAll('[data-fuel-del]').forEach(b=>b.addEventListener('click',()=>deleteFuel(b.dataset.fuelDel)))
 }
 async function saveFuel(e){
- e.preventDefault();const form=e.currentTarget,btn=form.querySelector('button[type=submit]'),f=new FormData(form),amount=Number(f.get('amount')),date=f.get('fueled_at'),file=f.get('file');
+ e.preventDefault();const form=e.currentTarget,btn=form.querySelector('button[type=submit]'),f=new FormData(form),amount=Number(f.get('amount')),date=f.get('fueled_at'),files=f.getAll('file');
  if(!amount||amount<=0){toast('Informe um valor válido.');return}
  btn.disabled=true;btn.textContent='Salvando...';let attachment_path=null;
- try{if(file&&file.size)attachment_path=await uploadFuelReceipt(file,date);const q=await sb.from('fuel_expenses').insert({user_id:user.id,amount,fueled_at:date,station:String(f.get('station')||'').trim()||null,payment_method:f.get('payment_method')||null,notes:String(f.get('notes')||'').trim()||null,attachment_path});if(q.error)throw q.error;toast('Abastecimento salvo');await loadAll()}catch(err){if(attachment_path)await sb.storage.from('financeiro').remove([attachment_path]);if(err.message!=='__VALIDATION__')toast('Não foi possível salvar: '+err.message)}finally{btn.disabled=false;btn.textContent='Salvar abastecimento'}
+ try{attachment_path=attachmentValue(await uploadAttachmentFiles(files,user.id+'/gasolina/'+date));const q=await sb.from('fuel_expenses').insert({user_id:user.id,amount,fueled_at:date,station:String(f.get('station')||'').trim()||null,payment_method:f.get('payment_method')||null,notes:String(f.get('notes')||'').trim()||null,attachment_path});if(q.error)throw q.error;toast('Abastecimento salvo');await loadAll()}catch(err){if(attachment_path)await sb.storage.from('financeiro').remove(attachmentPaths(attachment_path));if(err.message!=='__VALIDATION__')toast('Não foi possível salvar: '+err.message)}finally{btn.disabled=false;btn.textContent='Salvar abastecimento'}
 }
 function editFuel(id){
  const x=(data.fuel||[]).find(v=>v.id===id);if(!x)return;
  const methods=['Pix','Dinheiro','Débito','Crédito','Outro'].map(v=>[v,v]);
  openEditor('Editar abastecimento','<div><label>Valor</label><input class="field" name="amount" type="number" min="0.01" step="0.01" required value="'+Number(x.amount||0).toFixed(2)+'" /></div><div><label>Data</label><input class="field" name="fueled_at" type="date" required value="'+esc(x.fueled_at||'')+'" /></div><div><label>Posto</label><input class="field" name="station" value="'+esc(x.station||'')+'" /></div><div><label>Pagamento</label><select class="field" name="payment_method">'+opts(methods,x.payment_method||'')+'</select></div><div class="span2"><label>Substituir comprovante</label><input class="field" name="file" type="file" multiple accept="image/*,.pdf,application/pdf" />'+(x.attachment_path?'<label style="font-weight:500;margin-top:8px"><input type="checkbox" name="remove_receipt" /> Remover comprovante atual</label>':'')+'</div><div class="span3"><label>Observação</label><textarea class="field" name="notes">'+esc(x.notes||'')+'</textarea></div>',async f=>{
   const amount=Number(f.get('amount'));if(!amount||amount<=0){toast('Informe um valor válido.');return false}
-  const file=f.get('file'),oldPath=x.attachment_path||null,remove=f.get('remove_receipt')==='on';let attachment_path=remove?null:oldPath,newPath=null;
-  try{if(file&&file.size){newPath=await uploadFuelReceipt(file,f.get('fueled_at'));attachment_path=newPath}const q=await sb.from('fuel_expenses').update({amount,fueled_at:f.get('fueled_at'),station:String(f.get('station')||'').trim()||null,payment_method:f.get('payment_method')||null,notes:String(f.get('notes')||'').trim()||null,attachment_path}).eq('id',id);if(q.error)throw q.error;if(remove&&oldPaths.length)await sb.storage.from('financeiro').remove(oldPaths);toast('Abastecimento atualizado');await loadAll();return true}catch(err){if(newPath)await sb.storage.from('financeiro').remove([newPath]);if(err.message!=='__VALIDATION__')toast('Não foi possível atualizar: '+err.message);return false}
+  const files=f.getAll('file'),oldPaths=attachmentPaths(x.attachment_path),remove=f.get('remove_receipt')==='on';let attachment_path=remove?null:x.attachment_path,newPaths=[];
+  try{if(files.some(v=>v&&v.size)){newPaths=await uploadAttachmentFiles(files,user.id+'/gasolina/'+f.get('fueled_at'));attachment_path=attachmentValue(newPaths)}const q=await sb.from('fuel_expenses').update({amount,fueled_at:f.get('fueled_at'),station:String(f.get('station')||'').trim()||null,payment_method:f.get('payment_method')||null,notes:String(f.get('notes')||'').trim()||null,attachment_path}).eq('id',id);if(q.error)throw q.error;if(remove&&oldPaths.length)await sb.storage.from('financeiro').remove(oldPaths);toast('Abastecimento atualizado');await loadAll();return true}catch(err){if(newPaths.length)await sb.storage.from('financeiro').remove(newPaths);if(err.message!=='__VALIDATION__')toast('Não foi possível atualizar: '+err.message);return false}
  })
 }
 async function deleteFuel(id){
@@ -566,7 +565,7 @@ async function deleteFuel(id){
  if(q.error){toast('Não foi possível excluir: '+q.error.message);return}
  const result=q.data||{};
  if(!result.ok){toast(result.message||'Não foi possível excluir este abastecimento.');return}
- const path=result.attachment_path||x.attachment_path;
+ const paths=attachmentPaths(result.attachment_path||x.attachment_path);
  if(paths.length){const rm=await sb.storage.from('financeiro').remove(paths);if(rm.error)console.warn('Comprovantes órfãos:',rm.error.message)}
  toast('Abastecimento excluído');await loadAll()
 }

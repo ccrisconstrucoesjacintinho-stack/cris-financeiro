@@ -265,7 +265,7 @@ function updatePayablesSearch(){
   if(!input||!tabs)return;
   const q=input.value;
   const tab=tabs.dataset.tab||'all';
-  const filtered=data.payables.filter(p=>payableTabMatch(p,tab)&&payableMatchesSearch(p,q));
+  const filtered=data.payables.filter(p=>!String(p.category||'').toLowerCase().startsWith('imposto')&&payableTabMatch(p,tab)&&payableMatchesSearch(p,q));
   const area=$('#payablesListArea'),count=$('#payableSearchCount');
   if(count)count.textContent=q.trim()?filtered.length+' encontrada(s)':filtered.length+' conta(s)';
   if(area)area.innerHTML=payableList(filtered,false);
@@ -350,7 +350,7 @@ async function payModal(id){
   )
 }
 function renderPaidPayables(){
-  const list=(data.payables||[]).filter(p=>effectiveStatus(p)==='paid');
+  const list=(data.payables||[]).filter(p=>!String(p.category||'').toLowerCase().startsWith('imposto')&&effectiveStatus(p)==='paid');
   const total=list.reduce((a,p)=>a+paidFor(p.id),0);
   const suppliers=data.suppliers.filter(s=>list.some(p=>p.supplier_id===s.id)).sort((a,b)=>String(a.name||'').localeCompare(String(b.name||''),'pt-BR'));
   let html='<div class="grid cards">'+

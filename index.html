@@ -135,11 +135,11 @@ function effectiveStatus(p){const bal=payableBal(p);if(bal<=.005)return 'paid';i
 function renderTaxes(){
   const allTaxes=(data.payables||[]).filter(p=>String(p.category||'').toLowerCase().startsWith('imposto'));
   const typeLabel=p=>{
-    const c=String(p.category||'').toLowerCase();
-    if(c.includes('estadual')) return 'Estadual';
-    if(c.includes('federal')) return 'Federal';
-    if(c.includes('municipal')) return 'Municipal';
-    if(c.includes('simples')) return 'Simples Nacional';
+    const c=String(p.category||'').trim().toLowerCase();
+    if(c==='imposto - estadual') return 'Estadual';
+    if(c==='imposto - federal') return 'Federal';
+    if(c==='imposto - municipal') return 'Municipal';
+    if(c==='imposto - simples nacional') return 'Simples Nacional';
     return 'Sem classificação';
   };
   const taxes=allTaxes.filter(p=>typeLabel(p)===taxTypeFilter);
@@ -205,7 +205,7 @@ function renderTaxes(){
       '<div class="span2"><label>Descrição</label><input class="field" name="description" required placeholder="Ex.: Parcelamento Simples Nacional" /></div>'+
       '<div><label>Valor da parcela</label><input class="field" name="installment_amount" type="number" min="0.01" step="0.01" required placeholder="0,00" /></div>'+
       '<div><label>Quantidade de parcelas</label><input class="field" name="installments" type="number" min="1" max="120" step="1" value="1" required /></div>'+
-      '<div><label>Tipo de imposto</label><select class="field" name="tax_type" required><option value="Estadual">Imposto Estadual</option><option value="Federal">Imposto Federal</option><option value="Municipal">Imposto Municipal</option><option value="Simples Nacional">Simples Nacional</option></select></div>'+
+      '<div><label>Tipo de imposto</label><select class="field" name="tax_type" required><option value="" selected>Selecione o tipo</option><option value="Estadual">Imposto Estadual</option><option value="Federal">Imposto Federal</option><option value="Municipal">Imposto Municipal</option><option value="Simples Nacional">Simples Nacional</option></select></div>'+
       '<div><label>1º vencimento</label><input class="field" name="first_due_date" type="date" required value="'+isoToday()+'" /></div>'+
       '<div><label>Nº documento</label><input class="field" name="document_number" /></div>'+
       '<div><label>Prioridade</label><select class="field" name="priority"><option value="normal">Normal</option><option value="high">Alta</option><option value="critical">Crítica</option></select></div>'+

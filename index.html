@@ -33,7 +33,7 @@ label{display:block;font-size:12px;font-weight:700;margin:12px 0 6px}.field{widt
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
-<div id="app" class="app">
+<div id="authGate" class="auth-gate"><div class="auth-card"><div class="brand"><div class="logo">CF</div><div><h1>Cris Financeiro</h1><p>Acesso protegido</p></div></div><form id="authGateForm"><label>Senha de acesso</label><input id="authGatePass" class="field" type="password" autocomplete="current-password" required autofocus><button id="authGateSubmit" class="btn full" type="submit">Entrar</button></form><div id="authGateMsg" class="auth-msg">Digite a senha de acesso para entrar.</div></div></div><div id="app" class="app">
   <aside class="sidebar">
     <div class="navbrand"><strong>Cris Financeiro</strong><span>Controle da loja</span></div>
     <nav class="nav" id="nav"></nav>
@@ -85,9 +85,16 @@ let signup=false, user={id:AUTH_USER_ID}, page='dashboard';
 let data={suppliers:[],payables:[],payments:[],income:[],expenses:[],receivables:[],receivablePayments:[],fuel:[]};
 const pages=[['dashboard','Visão geral'],['payables','Contas a pagar'],['suppliers','Fornecedores'],['income','Entradas'],['expenses','Saídas'],['debts','Mapa das dívidas'],['gasoline','⛽ Gasolina']];
 function toast(t){const el=$('#toast');if(!el)return;el.textContent=t;el.classList.remove('hidden');setTimeout(()=>el?.classList.add('hidden'),2800)}
+function closeEditor(){const m=$('#editModal');if(!m)return;m.classList.add('hidden');$('#editForm').onsubmit=null;const save=$('#editSave');if(save){save.classList.remove('hidden');save.disabled=false;save.textContent='Salvar alterações'}const cancel=$('#editCancel');if(cancel)cancel.textContent='Cancelar'}
+function openEditor(title,html,onSave){const m=$('#editModal'),form=$('#editForm'),save=$('#editSave');if(!m||!form||!save){toast('Não foi possível abrir esta janela.');return}$('#editTitle').textContent=title;$('#editBody').innerHTML=html;m.classList.remove('hidden');save.classList.remove('hidden');save.disabled=false;save.textContent='Salvar alterações';if($('#editCancel'))$('#editCancel').textContent='Cancelar';form.onsubmit=async e=>{e.preventDefault();save.disabled=true;save.textContent='Salvando...';try{const ok=await onSave(new FormData(form));if(ok!==false)closeEditor()}catch(err){console.error(err);toast('Não foi possível salvar as alterações.')}finally{save.disabled=false;save.textContent='Salvar alterações'}};setTimeout(()=>form.querySelector('input,select,textarea')?.focus(),30)}
 function navRender(){const html=pages.map(p=>'<button type="button" data-page="'+p[0]+'" class="'+(page===p[0]?'active':'')+'">'+p[1]+'</button>').join('');$('#nav').innerHTML=html;$('#mobileNav').innerHTML=html;document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>{page=b.dataset.page;history.replaceState(null,'','#'+page);navRender();render()}))}
+const AUTH_HASH='9e215d93b4ccd63385fdf1183df07ed36381ecb3ffd14b2cf80c0ed8e07ff613';
+async function hashAccessPassword(v){const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));return [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,'0')).join('')}
+function showAuthGate(){const gate=$('#authGate'),app=$('#app');if(gate)gate.classList.remove('hidden');if(app)app.style.display='none';setTimeout(()=>$('#authGatePass')?.focus(),20)}
+function openApp(){const gate=$('#authGate'),app=$('#app');if(gate)gate.classList.add('hidden');if(app)app.style.display='grid';boot()}
+$('#authGateForm').addEventListener('submit',async e=>{e.preventDefault();const pass=$('#authGatePass').value;const btn=$('#authGateSubmit'),msg=$('#authGateMsg');btn.disabled=true;msg.textContent='Verificando...';try{const ok=(await hashAccessPassword(pass))===AUTH_HASH;if(!ok){msg.textContent='Senha incorreta.';$('#authGatePass').select();return}sessionStorage.setItem('cris_financeiro_access','1');openApp()}catch(err){console.error(err);msg.textContent='Não foi possível verificar a senha.'}finally{btn.disabled=false}});
 async function boot(){user={id:AUTH_USER_ID};const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp))page=hp;const app=$('#app'),today=$('#todayLabel');if(app)app.classList.remove('hidden');if(today)today.textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});navRender();await loadAll()}
-$('#refresh').addEventListener('click',loadAll);
+$('#editClose').addEventListener('click',closeEditor);$('#editCancel').addEventListener('click',closeEditor);$('#editModal').addEventListener('click',e=>{if(e.target.id==='editModal')closeEditor()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#editModal').classList.contains('hidden'))closeEditor()});$('#refresh').addEventListener('click',loadAll);
 window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp)&&hp!==page){page=hp;navRender();render()}});
 
 async function loadAll(){
@@ -459,8 +466,6 @@ async function deleteFuel(id){
  if(path){const rm=await sb.storage.from('financeiro').remove([path]);if(rm.error)console.warn('Comprovante órfão:',rm.error.message)}
  toast('Abastecimento excluído');await loadAll()
 }
-function daysLate(p,today){const d=new Date(p.due_date+'T12:00:00');return Math.floor((today-d)/86400000)}
-async function deleteRow(table,id,msg){if(!confirm(msg))return;const q=await sb.from(table).delete().eq('id',id);if(q.error)toast(q.error.message);else{toast('Excluído');await loadAll()}}
-boot();
+if(sessionStorage.getItem('cris_financeiro_access')==='1'){openApp()}else{showAuthGate()}
 </script>
 </body></html>

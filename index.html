@@ -147,19 +147,40 @@ function renderTaxes(){
   const paid=taxes.filter(p=>effectiveStatus(p)==='paid');
   const totalOpen=open.reduce((a,p)=>a+payableBal(p),0);
   const totalPaid=paid.reduce((a,p)=>a+paidFor(p.id),0);
-  const rows=taxes.slice().sort((a,b)=>String(a.due_date||'').localeCompare(String(b.due_date||''))).map(p=>{
-    const st=effectiveStatus(p), bal=payableBal(p);
-    const label=st==='overdue'?'Vencido':st==='partial'?'Parcial':st==='paid'?'Pago':'Em dia';
-    return '<div class="row '+(st==='overdue'?'payable-overdue':st==='partial'?'payable-partial':'')+'">'+
-      '<div><div class="title">'+esc(p.description)+'</div><div class="sub">'+esc(typeLabel(p))+' · '+esc(p.document_number||'Sem documento')+' · <span class="status-inline '+st+'">'+label+'</span></div></div>'+
-      '<div class="datecol"><div class="sub">Vencimento</div><strong>'+dbr(p.due_date)+'</strong></div>'+
-      '<div class="money"><div class="sub">'+(st==='paid'?'Pago':'Falta pagar')+'</div>'+money(st==='paid'?paidFor(p.id):bal)+'</div>'+
-      '<div class="actions">'+(bal>0?'<button type="button" class="btn small" data-tax-pay="'+p.id+'">Marcar como pago</button>':'<span class="pill">✓ Pago</span>')+
-      '<button type="button" class="btn secondary small" data-tax-history="'+p.id+'">Histórico</button>'+
-      '<button type="button" class="btn secondary small" data-tax-edit="'+p.id+'">Editar</button>'+
-      '<button type="button" class="btn danger small" data-tax-del="'+p.id+'">Excluir</button></div>'+
-      '</div>';
+
+  // Agrupa as parcelas do mesmo imposto para que nenhuma desapareça após um pagamento.
+  const groups=new Map();
+  taxes.forEach(p=>{
+    const desc=String(p.description||'');
+    const base=desc.replace(/\s+—\s+parcela\s+\d+\/\d+\s*$/i,'').trim()||desc;
+    const key=base+'|'+String(p.document_number||'');
+    if(!groups.has(key))groups.set(key,{base,document:p.document_number||'',items:[]});
+    groups.get(key).items.push(p);
+  });
+
+  const groupRows=[...groups.values()].sort((a,b)=>String(a.items[0]?.due_date||'').localeCompare(String(b.items[0]?.due_date||''))).map(g=>{
+    const items=g.items.slice().sort((a,b)=>String(a.due_date||'').localeCompare(String(b.due_date||'')));
+    const groupTotal=items.reduce((a,p)=>a+Number(p.current_amount||0),0);
+    const groupPaid=items.reduce((a,p)=>a+paidFor(p.id),0);
+    const groupOpen=items.reduce((a,p)=>a+payableBal(p),0);
+    const installmentRows=items.map(p=>{
+      const st=effectiveStatus(p),bal=payableBal(p);
+      const label=st==='overdue'?'Vencido':st==='partial'?'Parcial':st==='paid'?'Pago':'Em dia';
+      return '<div class="row '+(st==='overdue'?'payable-overdue':st==='partial'?'payable-partial':'')+'" style="margin-top:8px">'+
+        '<div><div class="title">'+esc(p.description)+'</div><div class="sub">'+esc(typeLabel(p))+' · '+esc(p.document_number||'Sem documento')+' · <span class="status-inline '+st+'">'+label+'</span></div></div>'+
+        '<div class="datecol"><div class="sub">Vencimento</div><strong>'+dbr(p.due_date)+'</strong></div>'+
+        '<div class="money"><div class="sub">'+(st==='paid'?'Pago':'Falta pagar')+'</div>'+money(st==='paid'?paidFor(p.id):bal)+'</div>'+
+        '<div class="actions">'+(bal>0?'<button type="button" class="btn small" data-tax-pay="'+p.id+'">Marcar como pago</button>':'<span class="pill">✓ Pago</span>')+
+        '<button type="button" class="btn secondary small" data-tax-history="'+p.id+'">Histórico</button>'+
+        '<button type="button" class="btn secondary small" data-tax-edit="'+p.id+'">Editar</button>'+
+        '<button type="button" class="btn danger small" data-tax-del="'+p.id+'">Excluir</button></div></div>';
+    }).join('');
+    return '<div class="card" style="margin-bottom:12px">'+
+      '<div class="section-title"><div><h3>'+esc(g.base)+'</h3><div class="sub">'+(g.document?'Documento: '+esc(g.document)+' · ':'')+items.length+' parcela'+(items.length===1?'':'s')+'</div></div>'+
+      '<div style="text-align:right"><strong>'+money(groupTotal)+'</strong><div class="sub">Pago: '+money(groupPaid)+' · Falta: '+money(groupOpen)+'</div></div></div>'+
+      '<div class="list">'+installmentRows+'</div></div>';
   }).join('');
+
   $('#content').innerHTML=
     '<div class="grid cards">'+
       '<div class="card metric warn"><div class="k">Impostos em aberto</div><div class="v">'+money(totalOpen)+'</div></div>'+
@@ -174,8 +195,7 @@ function renderTaxes(){
       '<button type="button" class="btn small '+(taxTypeFilter==='Simples Nacional'?'':'secondary')+'" data-tax-filter="Simples Nacional">Simples Nacional</button>'+
     '</div>'+
     '<div class="notice">O valor informado é o <strong>valor de cada parcela</strong>. Informe a quantidade de parcelas e a primeira data; o sistema repetirá esse mesmo valor todos os meses. Impostos ficam separados da aba Contas a pagar.</div>'+
-    '<div class="notice">O valor informado é o <strong>valor de cada parcela</strong>. Informe a quantidade de parcelas e a primeira data; o sistema repetirá esse mesmo valor todos os meses.</div>'+
-    '<div class="list">'+(rows||'<div class="empty">Nenhum imposto cadastrado neste filtro.</div>')+'</div>';
+    '<div>'+ (groupRows || '<div class="empty">Nenhum imposto cadastrado neste filtro.</div>') +'</div>';
 
   document.querySelectorAll('[data-tax-filter]').forEach(btn=>btn.addEventListener('click',()=>{taxTypeFilter=btn.dataset.taxFilter;renderTaxes()}));
   $('#newTaxBtn').addEventListener('click',()=>{
@@ -189,37 +209,18 @@ function renderTaxes(){
       '<div><label>Prioridade</label><select class="field" name="priority"><option value="normal">Normal</option><option value="high">Alta</option><option value="critical">Crítica</option></select></div>'+
       '<div class="span3"><label>Observação</label><textarea class="field" name="notes" placeholder="Ex.: entrada + parcelas, referência do acordo..."></textarea></div>',
       async f=>{
-        const amount=Number(f.get('installment_amount'));
-        const n=Math.floor(Number(f.get('installments')));
-        const first=String(f.get('first_due_date')||'');
-        const description=String(f.get('description')||'').trim();
-        const taxType=String(f.get('tax_type')||'').trim();
-        if(!description||!amount||amount<=0||!Number.isInteger(n)||n<1||n>120||!taxType||!/^\d{4}-\d{2}-\d{2}$/.test(first)){
-          toast('Preencha descrição, valor da parcela, parcelas, tipo e data corretamente.');
-          return false;
-        }
-        const rows=[];
-        const startDate=new Date(first+'T12:00:00Z');
+        const amount=Number(f.get('installment_amount')), n=Math.floor(Number(f.get('installments')));
+        const first=String(f.get('first_due_date')||''), description=String(f.get('description')||'').trim(), taxType=String(f.get('tax_type')||'').trim();
+        if(!description||!amount||amount<=0||!Number.isInteger(n)||n<1||n>120||!taxType||!/^\d{4}-\d{2}-\d{2}$/.test(first)){toast('Preencha descrição, valor da parcela, parcelas, tipo e data corretamente.');return false}
+        const rows=[],startDate=new Date(first+'T12:00:00Z');
         for(let i=0;i<n;i++){
           const d=new Date(Date.UTC(startDate.getUTCFullYear(),startDate.getUTCMonth()+i,startDate.getUTCDate()));
           const y=d.getUTCFullYear(),m=String(d.getUTCMonth()+1).padStart(2,'0'),day=String(d.getUTCDate()).padStart(2,'0');
-          rows.push({
-            user_id:user.id,supplier_id:null,
-            description:description+' — parcela '+(i+1)+'/'+n,
-            document_number:String(f.get('document_number')||'').trim()||null,
-            category:'Imposto - '+taxType,
-            original_amount:amount,
-            current_amount:amount,
-            due_date:y+'-'+m+'-'+day,
-            priority:f.get('priority'),
-            notes:String(f.get('notes')||'').trim()||null
-          });
+          rows.push({user_id:user.id,supplier_id:null,description:description+' — parcela '+(i+1)+'/'+n,document_number:String(f.get('document_number')||'').trim()||null,category:'Imposto - '+taxType,original_amount:amount,current_amount:amount,due_date:y+'-'+m+'-'+day,priority:f.get('priority'),notes:String(f.get('notes')||'').trim()||null});
         }
         const q=await sb.from('accounts_payable').insert(rows);
         if(q.error){toast('Não foi possível criar as parcelas: '+q.error.message);return false}
-        toast(n===1?'Imposto cadastrado':'Imposto parcelado em '+n+'x');
-        await loadAll();
-        return true;
+        toast(n===1?'Imposto cadastrado':'Imposto parcelado em '+n+'x');await loadAll();return true;
       }
     )
   });

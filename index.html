@@ -153,8 +153,10 @@ function renderTaxes(){
   taxes.forEach(p=>{
     const desc=String(p.description||'');
     const base=desc.replace(/\s+—\s+parcela\s+\d+\/\d+\s*$/i,'').trim()||desc;
-    const key=base+'|'+String(p.document_number||'');
-    if(!groups.has(key))groups.set(key,{base,document:p.document_number||'',items:[]});
+    const match=desc.match(/\s+—\s+parcela\s+(\d+)\/(\d+)\s*$/i);
+    const totalInstallments=match?match[2]:'';
+    const key=base+'|'+String(p.document_number||'')+'|'+totalInstallments;
+    if(!groups.has(key))groups.set(key,{base,document:p.document_number||'',items:[],totalInstallments});
     groups.get(key).items.push(p);
   });
 
@@ -349,7 +351,6 @@ async function payModal(id){
       await syncPayableStatus(id);
       toast(amount>=bal-.005?'Conta quitada e comprovante salvo!':'Pagamento parcial registrado');
       await loadAll();
-      if(page==='taxes') renderTaxes();
       return true
     }
   )

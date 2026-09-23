@@ -109,7 +109,42 @@ $('#refresh').addEventListener('click',loadAll);
 window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp)&&hp!==page){page=hp;navRender();render()}});
 sb.auth.onAuthStateChange(async(event,session)=>{if(session?.user&&event==='SIGNED_IN'){await boot(session.user)}if(!session&&event==='SIGNED_OUT'){showAuth()}});
 
-async function loadAll(){if(!user)return;const [s,p,pp,i,e,r,rp,f,d]=await Promise.all([sb.from('suppliers').select('*').order('name'),sb.from('accounts_payable').select('*').order('due_date'),sb.from('payments').select('*'),sb.from('income').select('*').order('occurred_at',{ascending:false}),sb.from('expenses').select('*').order('occurred_at',{ascending:false}),sb.from('accounts_receivable').select('*').order('due_date'),sb.from('receivable_payments').select('*'),sb.from('fuel_expenses').select('*').order('fueled_at',{ascending:false}),sb.from('debt_items').select('*').order('priority').order('due_date')]);for(const q of [s,p,pp,i,e,r,rp,f,d])if(q.error){toast(q.error.message);return}data={suppliers:s.data||[],payables:p.data||[],payments:pp.data||[],income:i.data||[],expenses:e.data||[],receivables:r.data||[],receivablePayments:rp.data||[],fuel:f.data||[],debts:d.data||[]};render()}
+async function loadAll(){
+  const sessionRes=await sb.auth.getSession();
+  const session=sessionRes.data?.session;
+  if(!session?.user){showAuth();return}
+  user=session.user;
+  const queries=[
+    ['fornecedores',sb.from('suppliers').select('*').order('name')],
+    ['contas a pagar',sb.from('accounts_payable').select('*').order('due_date')],
+    ['pagamentos',sb.from('payments').select('*')],
+    ['entradas',sb.from('income').select('*').order('occurred_at',{ascending:false})],
+    ['saídas',sb.from('expenses').select('*').order('occurred_at',{ascending:false})],
+    ['contas a receber',sb.from('accounts_receivable').select('*').order('due_date')],
+    ['recebimentos',sb.from('receivable_payments').select('*')],
+    ['gasolina',sb.from('fuel_expenses').select('*').order('fueled_at',{ascending:false})],
+    ['mapa das dívidas',sb.from('debt_items').select('*').order('priority').order('due_date')]
+  ];
+  const results=await Promise.all(queries.map(async([name,q])=>[name,await q]));
+  const errors=results.filter(([,q])=>q.error);
+  const byName=Object.fromEntries(results);
+  data={
+    suppliers:byName['fornecedores']?.data||[],
+    payables:byName['contas a pagar']?.data||[],
+    payments:byName['pagamentos']?.data||[],
+    income:byName['entradas']?.data||[],
+    expenses:byName['saídas']?.data||[],
+    receivables:byName['contas a receber']?.data||[],
+    receivablePayments:byName['recebimentos']?.data||[],
+    fuel:byName['gasolina']?.data||[],
+    debts:byName['mapa das dívidas']?.data||[]
+  };
+  if(errors.length){
+    console.error('Erros ao carregar dados:',errors.map(([name,q])=>({name,error:q.error})));
+    toast('Os dados foram carregados parcialmente. Erro em: '+errors.map(([name])=>name).join(', '));
+  }
+  render();
+}
 function paidFor(id){return data.payments.filter(x=>x.payable_id===id).reduce((a,b)=>a+Number(b.amount),0)} function payableBal(p){return Math.max(0,Number(p.current_amount)-paidFor(p.id))} function receivedFor(id){return data.receivablePayments.filter(x=>x.receivable_id===id).reduce((a,b)=>a+Number(b.amount),0)}
 function effectiveStatus(p){const bal=payableBal(p);if(bal<=.005)return 'paid';if(paidFor(p.id)>0)return 'partial';if(p.due_date<isoToday())return 'overdue';return 'open'}
 function render(){const meta=pages.find(p=>p[0]===page);$('#pageTitle').textContent=meta?meta[1]:'Financeiro';if(page==='dashboard')renderDashboard();if(page==='payables')renderPayables();if(page==='paidpayables')renderPaidPayables();if(page==='suppliers')renderSuppliers();if(page==='income')renderIncome();if(page==='expenses')renderExpenses();if(page==='receivables')renderReceivables();if(page==='debts')renderDebts();if(page==='gasoline')renderGasoline()}

@@ -33,23 +33,10 @@ label{display:block;font-size:12px;font-weight:700;margin:12px 0 6px}.field{widt
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
-<div id="auth" class="auth">
-  <div class="auth-card">
-    <div class="brand"><div class="logo">CF</div><div><h1>Cris Financeiro</h1><p>Acesso protegido</p></div></div>
-    <form id="authForm">
-      <label>Senha de acesso</label>
-      <input id="authPass" class="field" type="password" minlength="6" autocomplete="current-password" required autofocus />
-      <button class="btn full" id="authSubmit" type="submit">Entrar</button>
-    </form>
-    <div class="msg" id="authMsg">Digite a senha de acesso para entrar no sistema.</div>
-  </div>
-</div>
-
-<div id="app" class="app hidden">
+<div id="app" class="app">
   <aside class="sidebar">
     <div class="navbrand"><strong>Cris Financeiro</strong><span>Controle da loja</span></div>
     <nav class="nav" id="nav"></nav>
-    <div class="side-bottom"><button id="logout" class="btn secondary full" type="button">Sair</button></div>
   </aside>
   <main class="main">
     <div class="mobile-menu" id="mobileNav"></div>
@@ -90,30 +77,21 @@ window.addEventListener('unhandledrejection',function(e){
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 const SUPABASE_URL='https://nxjtninxbikekdcufdqz.supabase.co';
 const SUPABASE_KEY='sb_publishable_SOpFBEWN_nOMWFLsCpcKfA_akvfFFWG';
-const AUTH_EMAIL='ccrisconstrucoesjacintinho@gmail.com';
 const AUTH_USER_ID='a7b397b7-55b9-41c6-8379-0a599c216377';
-const sb=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+const sb=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
 const $=s=>document.querySelector(s); const money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
 const dbr=d=>d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'—'; const isoToday=()=>new Date().toISOString().slice(0,10); const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-let signup=false, user=null, page='dashboard';
+let signup=false, user={id:AUTH_USER_ID}, page='dashboard';
 let data={suppliers:[],payables:[],payments:[],income:[],expenses:[],receivables:[],receivablePayments:[],fuel:[]};
 const pages=[['dashboard','Visão geral'],['payables','Contas a pagar'],['suppliers','Fornecedores'],['income','Entradas'],['expenses','Saídas'],['debts','Mapa das dívidas'],['gasoline','⛽ Gasolina']];
 function toast(t){const el=$('#toast');if(!el)return;el.textContent=t;el.classList.remove('hidden');setTimeout(()=>el?.classList.add('hidden'),2800)}
-function showAuth(msg=''){user=null;const app=$('#app'),auth=$('#auth'),msgEl=$('#authMsg'),pass=$('#authPass');if(app)app.classList.add('hidden');if(auth)auth.classList.remove('hidden');if(msg&&msgEl)msgEl.textContent=msg;if(pass){pass.value='';setTimeout(()=>pass.focus(),30)}}
 function navRender(){const html=pages.map(p=>'<button type="button" data-page="'+p[0]+'" class="'+(page===p[0]?'active':'')+'">'+p[1]+'</button>').join('');$('#nav').innerHTML=html;$('#mobileNav').innerHTML=html;document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>{page=b.dataset.page;history.replaceState(null,'','#'+page);navRender();render()}))}
-async function boot(u){if(!u||u.id!==AUTH_USER_ID){await sb.auth.signOut();showAuth('Senha incorreta.');return}user=u;const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp))page=hp;const auth=$('#auth'),app=$('#app'),logout=$('#logout'),today=$('#todayLabel');if(auth)auth.classList.add('hidden');if(app)app.classList.remove('hidden');if(logout)logout.classList.remove('hidden');if(today)today.textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});navRender();await loadAll()}
-$('#authForm').addEventListener('submit',async e=>{e.preventDefault();const password=$('#authPass').value.trim();if(!password){$('#authMsg').textContent='Digite a senha de acesso.';return}const btn=$('#authSubmit');btn.disabled=true;btn.textContent='Entrando...';$('#authMsg').textContent='Aguarde...';try{const res=await sb.auth.signInWithPassword({email:AUTH_EMAIL,password});if(res.error){$('#authMsg').textContent='Senha incorreta.';return}await boot(res.data.user)}catch(err){console.error(err);$('#authMsg').textContent='Não foi possível entrar. Tente novamente.'}finally{btn.disabled=false;btn.textContent='Entrar'}});
-
-$('#logout').addEventListener('click',async()=>{await sb.auth.signOut();showAuth('Você saiu do sistema.')});
+async function boot(){user={id:AUTH_USER_ID};const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp))page=hp;const app=$('#app'),today=$('#todayLabel');if(app)app.classList.remove('hidden');if(today)today.textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});navRender();await loadAll()}
 $('#refresh').addEventListener('click',loadAll);
 window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp)&&hp!==page){page=hp;navRender();render()}});
-sb.auth.onAuthStateChange(async(event,session)=>{if(session?.user&&event==='SIGNED_IN'){await boot(session.user)}if(!session&&event==='SIGNED_OUT'){showAuth()}});
 
 async function loadAll(){
-  const sessionRes=await sb.auth.getSession();
-  const session=sessionRes.data?.session;
-  if(!session?.user){showAuth();return}
-  user=session.user;
+  if(!user) user={id:AUTH_USER_ID};
   const queries=[
     ['fornecedores',sb.from('suppliers').select('*').order('name')],
     ['contas a pagar',sb.from('accounts_payable').select('*').order('due_date')],
@@ -483,6 +461,6 @@ async function deleteFuel(id){
 }
 function daysLate(p,today){const d=new Date(p.due_date+'T12:00:00');return Math.floor((today-d)/86400000)}
 async function deleteRow(table,id,msg){if(!confirm(msg))return;const q=await sb.from(table).delete().eq('id',id);if(q.error)toast(q.error.message);else{toast('Excluído');await loadAll()}}
-const {data:{session:initialSession}}=await sb.auth.getSession();if(initialSession?.user){await boot(initialSession.user)}else{showAuth()}
+boot();
 </script>
 </body></html>

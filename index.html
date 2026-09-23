@@ -145,7 +145,7 @@ function renderTaxes(){
       '<div><div class="title">'+esc(p.description)+'</div><div class="sub">'+esc(p.document_number||'Imposto')+' · <span class="status-inline '+st+'">'+label+'</span></div></div>'+
       '<div class="datecol"><div class="sub">Vencimento</div><strong>'+dbr(p.due_date)+'</strong></div>'+
       '<div class="money"><div class="sub">'+(st==='paid'?'Pago':'Falta pagar')+'</div>'+money(st==='paid'?paidFor(p.id):bal)+'</div>'+
-      '<div class="actions">'+(bal>0?'<button type="button" class="btn small" data-tax-pay="'+p.id+'">Registrar pagamento</button>':'')+
+      '<div class="actions">'+(bal>0?'<button type="button" class="btn small" data-tax-pay="'+p.id+'">Marcar como pago</button>':'<span class="pill">✓ Pago</span>')+
       '<button type="button" class="btn secondary small" data-tax-history="'+p.id+'">Histórico</button>'+
       '<button type="button" class="btn secondary small" data-tax-edit="'+p.id+'">Editar</button>'+
       '<button type="button" class="btn danger small" data-tax-del="'+p.id+'">Excluir</button></div>'+
@@ -154,34 +154,62 @@ function renderTaxes(){
   $('#content').innerHTML=
     '<div class="grid cards">'+
       '<div class="card metric warn"><div class="k">Impostos em aberto</div><div class="v">'+money(totalOpen)+'</div></div>'+
-      '<div class="card metric"><div class="k">Quantidade em aberto</div><div class="v">'+open.length+'</div></div>'+
+      '<div class="card metric"><div class="k">Parcelas em aberto</div><div class="v">'+open.length+'</div></div>'+
       '<div class="card metric ok"><div class="k">Impostos pagos</div><div class="v">'+money(totalPaid)+'</div></div>'+
     '</div>'+
     '<div class="section-title"><h3>Impostos</h3><button type="button" class="btn" id="newTaxBtn">+ Novo imposto</button></div>'+
-    '<div class="notice">Aqui aparecem automaticamente as contas cadastradas em <strong>Contas a pagar → Categoria: Imposto</strong>.</div>'+
+    '<div class="notice">Informe o valor total, a quantidade de parcelas e a primeira data. O sistema cria automaticamente uma parcela por mês.</div>'+
     '<div class="list">'+(rows||'<div class="empty">Nenhum imposto cadastrado.</div>')+'</div>';
 
   $('#newTaxBtn').addEventListener('click',()=>{
-    openEditor('Novo imposto',
-      '<div><label>Descrição</label><input class="field" name="description" required placeholder="Ex.: DAS, ICMS, IRPJ..." /></div>'+
-      '<div><label>Valor</label><input class="field" name="amount" type="number" min="0.01" step="0.01" required /></div>'+
-      '<div><label>Vencimento</label><input class="field" name="due_date" type="date" required value="'+isoToday()+'" /></div>'+
+    openEditor('Novo imposto / parcelamento',
+      '<div class="span2"><label>Descrição</label><input class="field" name="description" required placeholder="Ex.: Parcelamento Simples Nacional" /></div>'+
+      '<div><label>Valor total</label><input class="field" name="total_amount" type="number" min="0.01" step="0.01" required placeholder="0,00" /></div>'+
+      '<div><label>Quantidade de parcelas</label><input class="field" name="installments" type="number" min="1" max="120" step="1" value="1" required /></div>'+
+      '<div><label>1º vencimento</label><input class="field" name="first_due_date" type="date" required value="'+isoToday()+'" /></div>'+
       '<div><label>Nº documento</label><input class="field" name="document_number" /></div>'+
       '<div><label>Prioridade</label><select class="field" name="priority"><option value="normal">Normal</option><option value="high">Alta</option><option value="critical">Crítica</option></select></div>'+
-      '<div class="span3"><label>Observação</label><textarea class="field" name="notes"></textarea></div>',
+      '<div class="span3"><label>Observação</label><textarea class="field" name="notes" placeholder="Ex.: entrada + parcelas, referência do acordo..."></textarea></div>',
       async f=>{
-        const amount=Number(f.get('amount'));
-        if(!amount||amount<=0){toast('Informe um valor válido.');return false}
-        const q=await sb.from('accounts_payable').insert({user_id:user.id,supplier_id:null,description:String(f.get('description')||'').trim(),document_number:String(f.get('document_number')||'').trim()||null,category:'Imposto',original_amount:amount,current_amount:amount,due_date:f.get('due_date'),priority:f.get('priority'),notes:String(f.get('notes')||'').trim()||null});
-        if(q.error){toast(q.error.message);return false}
-        toast('Imposto cadastrado');await loadAll();return true
+        const total=Number(f.get('total_amount'));
+        const n=Math.floor(Number(f.get('installments')));
+        const first=String(f.get('first_due_date')||'');
+        const description=String(f.get('description')||'').trim();
+        if(!description||!total||total<=0||!Number.isInteger(n)||n<1||n>120||!/^d{4}-d{2}-d{2}$/.test(first)){
+          toast('Preencha descrição, valor, parcelas e data corretamente.');
+          return false;
+        }
+        const cents=Math.round(total*100), base=Math.floor(cents/n), remainder=cents-base*n;
+        const rows=[];
+        const start=new Date(first+'T12:00:00Z');
+        for(let i=0;i<n;i++){
+          const d=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+i,start.getUTCDate()));
+          const y=d.getUTCFullYear(),m=String(d.getUTCMonth()+1).padStart(2,'0'),day=String(d.getUTCDate()).padStart(2,'0');
+          const amountCents=base+(i===n-1?remainder:0);
+          rows.push({
+            user_id:user.id,supplier_id:null,
+            description:description+' — parcela '+(i+1)+'/'+n,
+            document_number:String(f.get('document_number')||'').trim()||null,
+            category:'Imposto',
+            original_amount:amountCents/100,
+            current_amount:amountCents/100,
+            due_date:y+'-'+m+'-'+day,
+            priority:f.get('priority'),
+            notes:String(f.get('notes')||'').trim()||null
+          });
+        }
+        const q=await sb.from('accounts_payable').insert(rows);
+        if(q.error){toast('Não foi possível criar as parcelas: '+q.error.message);return false}
+        toast(n===1?'Imposto cadastrado':'Imposto parcelado em '+n+'x');
+        await loadAll();
+        return true;
       }
     )
   });
   document.querySelectorAll('[data-tax-pay]').forEach(b=>b.addEventListener('click',()=>payModal(b.dataset.taxPay)));
   document.querySelectorAll('[data-tax-history]').forEach(b=>b.addEventListener('click',()=>paymentHistory(b.dataset.taxHistory)));
   document.querySelectorAll('[data-tax-edit]').forEach(b=>b.addEventListener('click',()=>editPayable(b.dataset.taxEdit)));
-  document.querySelectorAll('[data-tax-del]').forEach(b=>b.addEventListener('click',()=>deleteRow('accounts_payable',b.dataset.taxDel,'Excluir este imposto?')));
+  document.querySelectorAll('[data-tax-del]').forEach(b=>b.addEventListener('click',()=>deleteRow('accounts_payable',b.dataset.taxDel,'Excluir esta parcela?')));
 }
 function render(){const meta=pages.find(p=>p[0]===page);$('#pageTitle').textContent=meta?meta[1]:'Financeiro';if(page==='dashboard')renderDashboard();if(page==='payables')renderPayables();if(page==='taxes')renderTaxes();if(page==='paidpayables')renderPaidPayables();if(page==='suppliers')renderSuppliers();if(page==='income')renderIncome();if(page==='expenses')renderExpenses();if(page==='receivables')renderReceivables();if(page==='debts')renderDebts();if(page==='gasoline')renderGasoline()}
 function monthKey(d){return String(d||'').slice(0,7)}

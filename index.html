@@ -79,7 +79,7 @@ const SUPABASE_URL='https://nxjtninxbikekdcufdqz.supabase.co';
 const SUPABASE_KEY='sb_publishable_SOpFBEWN_nOMWFLsCpcKfA_akvfFFWG';
 const AUTH_USER_ID='a7b397b7-55b9-41c6-8379-0a599c216377';
 const sb=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
-const $=s=>document.querySelector(s); const money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
+function opts(items,selected){return (items||[]).map(v=>{const value=Array.isArray(v)?v[0]:v;const label=Array.isArray(v)?v[1]:v;return '<option value="'+esc(value)+'" '+(String(value)===String(selected)?'selected':'')+'>'+esc(label)+'</option>'}).join('')} const $=s=>document.querySelector(s); const money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
 const dbr=d=>d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'—'; const isoToday=()=>new Date().toISOString().slice(0,10); const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let signup=false, user={id:AUTH_USER_ID}, page='dashboard';
 let data={suppliers:[],payables:[],payments:[],income:[],expenses:[],receivables:[],receivablePayments:[],fuel:[]};

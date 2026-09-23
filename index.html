@@ -348,7 +348,9 @@ async function payModal(id){
       if(q.error){if(attachment_path)await sb.storage.from('financeiro').remove(attachmentPaths(attachment_path));toast(q.error.message);return false}
       await syncPayableStatus(id);
       toast(amount>=bal-.005?'Conta quitada e comprovante salvo!':'Pagamento parcial registrado');
-      await loadAll();return true
+      await loadAll();
+      if(page==='taxes') renderTaxes();
+      return true
     }
   )
 }

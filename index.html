@@ -467,6 +467,12 @@ async function editPayable(id){
         toast('Valor da parcela atualizado');await loadAll();return true
       }
       if(amount<paid-.005){toast('O valor total não pode ser menor que o valor já pago.');return false}
+      const nextCategory=String(f.get('category')||'Fornecedor').trim();
+      if(nextCategory==='Imposto'){
+        const qTax=await sb.from('accounts_payable').update({supplier_id:null,category:'Imposto'}).eq('id',id);
+        if(qTax.error){toast(qTax.error.message);return false}
+        toast('Conta alterada para Imposto');await loadAll();return true
+      }
       let attachment_path=p.attachment_path||null;const files=f.getAll('file');
       if(files.some(v=>v&&v.size)){try{attachment_path=attachmentValue(await uploadAttachmentFiles(files,user.id+'/contas'))}catch(err){if(err.message!=='__VALIDATION__')toast('Erro ao anexar: '+err.message);return false}}
       const balance=Math.max(0,amount-paid);const payload={supplier_id:f.get('supplier_id')||null,description:String(f.get('description')||'').trim(),document_number:f.get('document_number')||null,category:f.get('category'),original_amount:amount,current_amount:amount,due_date:f.get('due_date'),priority:f.get('priority'),notes:f.get('notes')||null,attachment_path,status:balance<=.005?'paid':paid>0?'partial':'open'};

@@ -469,7 +469,7 @@ async function editPayable(id){
       if(amount<paid-.005){toast('O valor total não pode ser menor que o valor já pago.');return false}
       const nextCategory=String(f.get('category')||'Fornecedor').trim();
       if(nextCategory==='Imposto'){
-        const qTax=await sb.from('accounts_payable').update({supplier_id:null,category:'Imposto'}).eq('id',id);
+        const qTax=await sb.from('accounts_payable').update({supplier_id:null,category:'Imposto - Estadual'}).eq('id',id);
         if(qTax.error){toast(qTax.error.message);return false}
         toast('Conta alterada para Imposto');await loadAll();return true
       }

@@ -449,14 +449,14 @@ async function editPayable(id){
   openEditor('Editar conta a pagar',
     '<div><label>Fornecedor</label><select class="field" name="supplier_id">'+opts(supplierOptions,p.supplier_id||'')+'</select></div>'+ 
     '<div class="span2"><label>Descrição</label><input class="field" name="description" required value="'+esc(p.description||'')+'" /></div>'+ 
-    '<div><label>'+(isTaxPayable(p)?'Valor desta parcela':'Valor total')+'</label><input class="field" name="amount" type="number" min="'+Math.max(.01,paid).toFixed(2)+'" step="0.01" required value="'+Number(p.current_amount||0).toFixed(2)+'" /></div>'+ 
+    '<div><label>Valor total</label><input class="field" name="amount" type="number" min="'+Math.max(.01,paid).toFixed(2)+'" step="0.01" required value="'+Number(p.current_amount||0).toFixed(2)+'" /></div>'+ 
     '<div><label>Vencimento</label><input class="field" name="due_date" type="date" required value="'+esc(p.due_date||'')+'" /></div>'+ 
     '<div><label>Categoria</label><select class="field" name="category">'+opts(categories,p.category||'Fornecedor')+'</select></div>'+ 
     '<div><label>Prioridade</label><select class="field" name="priority">'+opts(priorities,p.priority||'normal')+'</select></div>'+ 
     '<div><label>Nº boleto/documento</label><input class="field" name="document_number" value="'+esc(p.document_number||'')+'" /></div>'+ 
     '<div><label>Substituir anexo</label><input class="field" name="file" type="file" multiple accept="image/*,.pdf" /><div class="field-note">Se não escolher arquivo, o anexo atual será mantido.</div></div>'+ 
     '<div class="span3"><label>Observação</label><textarea class="field" name="notes">'+esc(p.notes||'')+'</textarea></div>'+ 
-    '<div class="span3 edit-hint">Já pago nesta conta: <strong>'+money(paid)+'</strong>. '+(isTaxPayable(p)?'O valor informado altera somente esta parcela. As demais permanecem intactas.':'O novo valor total não pode ficar abaixo desse valor.')</div>',
+    '<div class="span3 edit-hint">Já pago nesta conta: <strong>'+money(paid)+'</strong>. O novo valor total não pode ficar abaixo desse valor.</div>',
     async f=>{
       const amount=Number(f.get('amount'));if(!amount||amount<paid-.005){toast('O valor total não pode ser menor que o valor já pago.');return false}
       let attachment_path=p.attachment_path||null;const files=f.getAll('file');

@@ -449,7 +449,7 @@ async function editPayable(id){
   openEditor('Editar conta a pagar',
     '<div><label>Fornecedor</label><select class="field" name="supplier_id">'+opts(supplierOptions,p.supplier_id||'')+'</select></div>'+ 
     '<div class="span2"><label>Descrição</label><input class="field" name="description" required value="'+esc(p.description||'')+'" /></div>'+ 
-    '<div><label>Valor total</label><input class="field" name="amount" type="number" min="'+Math.max(.01,paid).toFixed(2)+'" step="0.01" required value="'+Number(p.current_amount||0).toFixed(2)+'" /></div>'+ 
+    '<div><label>'+(isTaxPayable(p)?'Valor desta parcela':'Valor total')+'</label><input class="field" name="amount" type="number" min="'+Math.max(.01,paid).toFixed(2)+'" step="0.01" required value="'+Number(p.current_amount||0).toFixed(2)+'" /></div>'+ 
     '<div><label>Vencimento</label><input class="field" name="due_date" type="date" required value="'+esc(p.due_date||'')+'" /></div>'+ 
     '<div><label>Categoria</label><select class="field" name="category">'+opts(categories,p.category||'Fornecedor')+'</select></div>'+ 
     '<div><label>Prioridade</label><select class="field" name="priority">'+opts(priorities,p.priority||'normal')+'</select></div>'+ 
@@ -458,7 +458,15 @@ async function editPayable(id){
     '<div class="span3"><label>Observação</label><textarea class="field" name="notes">'+esc(p.notes||'')+'</textarea></div>'+ 
     '<div class="span3 edit-hint">Já pago nesta conta: <strong>'+money(paid)+'</strong>. O novo valor total não pode ficar abaixo desse valor.</div>',
     async f=>{
-      const amount=Number(f.get('amount'));if(!amount||amount<paid-.005){toast('O valor total não pode ser menor que o valor já pago.');return false}
+      const amount=Number(f.get('amount'));
+      if(!amount||amount<=0){toast('Informe um valor válido para a parcela.');return false}
+      if(isTaxPayable(p)){
+        if(amount<paid-.005){toast('O valor não pode ser menor que o que já foi pago nesta parcela.');return false}
+        const qTax=await sb.from('accounts_payable').update({current_amount:amount}).eq('id',id);
+        if(qTax.error){toast(qTax.error.message);return false}
+        toast('Valor da parcela atualizado');await loadAll();return true
+      }
+      if(amount<paid-.005){toast('O valor total não pode ser menor que o valor já pago.');return false}
       let attachment_path=p.attachment_path||null;const files=f.getAll('file');
       if(files.some(v=>v&&v.size)){try{attachment_path=attachmentValue(await uploadAttachmentFiles(files,user.id+'/contas'))}catch(err){if(err.message!=='__VALIDATION__')toast('Erro ao anexar: '+err.message);return false}}
       const balance=Math.max(0,amount-paid);const payload={supplier_id:f.get('supplier_id')||null,description:String(f.get('description')||'').trim(),document_number:f.get('document_number')||null,category:f.get('category'),original_amount:amount,current_amount:amount,due_date:f.get('due_date'),priority:f.get('priority'),notes:f.get('notes')||null,attachment_path,status:balance<=.005?'paid':paid>0?'partial':'open'};

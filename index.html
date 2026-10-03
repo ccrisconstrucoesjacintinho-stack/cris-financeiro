@@ -73,7 +73,19 @@ window.addEventListener('unhandledrejection',function(e){
 </script>
 <div id="runtimeError" style="display:none;position:fixed;left:16px;right:16px;bottom:16px;z-index:99999;background:#fff3cd;color:#6b4e00;border:1px solid #e0c56e;border-radius:12px;padding:12px 14px;font:14px system-ui;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
 <script type="module">
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+let createClient;
+try {
+  ({createClient}=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/+esm'));
+} catch (e1) {
+  try {
+    ({createClient}=await import('https://esm.sh/@supabase/supabase-js@2.57.4'));
+  } catch (e2) {
+    console.error('Falha ao carregar Supabase:',e2);
+    const box=document.getElementById('content');
+    if(box) box.innerHTML='<div class="notice"><strong>Não foi possível carregar o sistema financeiro.</strong>O navegador não conseguiu carregar um componente do sistema. Atualize a página e tente novamente.</div>';
+    throw e2;
+  }
+}
 const SUPABASE_URL='https://nxjtninxbikekdcufdqz.supabase.co';
 const SUPABASE_KEY='sb_publishable_SOpFBEWN_nOMWFLsCpcKfA_akvfFFWG';
 const AUTH_USER_ID='a7b397b7-55b9-41c6-8379-0a599c216377';

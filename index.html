@@ -33,10 +33,21 @@ label{display:block;font-size:12px;font-weight:700;margin:12px 0 6px}.field{widt
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
-<div id="app" class="app">
+<div id="auth" class="auth">
+  <div class="auth-card">
+    <div class="brand"><div class="logo">CF</div><div><h1>Cris Financeiro</h1><p>Acesso protegido</p></div></div>
+    <form id="authForm">
+      <label>Senha de acesso</label>
+      <input id="authPass" class="field" type="password" minlength="6" autocomplete="current-password" required autofocus />
+      <button class="btn full" id="authSubmit" type="submit">Entrar</button>
+    </form>
+    <div class="msg" id="authMsg">Digite a senha de acesso para entrar no sistema.</div>
+  </div>
+</div>
+<div id="app" class="app hidden">
   <aside class="sidebar">
     <div class="navbrand"><strong>Cris Financeiro</strong><span>Controle da loja</span></div>
-    <nav class="nav" id="nav"></nav>
+    <nav class="nav" id="nav"></nav><div style="position:absolute;left:14px;right:14px;bottom:18px"><button id="logout" class="btn secondary full" type="button">Sair</button></div>
   </aside>
   <main class="main">
     <div class="mobile-menu" id="mobileNav"></div>
@@ -78,7 +89,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
 const SUPABASE_URL='https://nxjtninxbikekdcufdqz.supabase.co';
 const SUPABASE_KEY='sb_publishable_SOpFBEWN_nOMWFLsCpcKfA_akvfFFWG';
 const AUTH_USER_ID='a7b397b7-55b9-41c6-8379-0a599c216377';
-const sb=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+let appPassword=sessionStorage.getItem('cris_finance_password')||'';
+const financeFetch=async(url,opts={})=>{
+  const headers=new Headers(opts.headers||{});
+  if(appPassword) headers.set('x-finance-password',appPassword);
+  return fetch(url,{...opts,headers});
+};
+const sb=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:financeFetch}});
 function opts(items,selected){return (items||[]).map(v=>{const value=Array.isArray(v)?v[0]:v;const label=Array.isArray(v)?v[1]:v;return '<option value="'+esc(value)+'" '+(String(value)===String(selected)?'selected':'')+'>'+esc(label)+'</option>'}).join('')} const $=s=>document.querySelector(s); const money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
 const dbr=d=>d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'—'; const isoToday=()=>new Date().toISOString().slice(0,10); const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let signup=false, user={id:AUTH_USER_ID}, page='dashboard', taxTypeFilter='Estadual', reportMode='cashflow';
@@ -88,11 +105,33 @@ function toast(t){const el=$('#toast');if(!el)return;el.textContent=t;el.classLi
 function closeEditor(){const m=$('#editModal');if(!m)return;m.classList.add('hidden');$('#editForm').onsubmit=null;const save=$('#editSave');if(save){save.classList.remove('hidden');save.disabled=false;save.textContent='Salvar alterações'}const cancel=$('#editCancel');if(cancel)cancel.textContent='Cancelar'}
 function openEditor(title,html,onSave){const m=$('#editModal'),form=$('#editForm'),save=$('#editSave');if(!m||!form||!save){toast('Não foi possível abrir esta janela.');return}$('#editTitle').textContent=title;$('#editBody').innerHTML=html;m.classList.remove('hidden');save.classList.remove('hidden');save.disabled=false;save.textContent='Salvar alterações';if($('#editCancel'))$('#editCancel').textContent='Cancelar';form.onsubmit=async e=>{e.preventDefault();save.disabled=true;save.textContent='Salvando...';try{const ok=await onSave(new FormData(form));if(ok!==false)closeEditor()}catch(err){console.error(err);toast('Não foi possível salvar as alterações.')}finally{save.disabled=false;save.textContent='Salvar alterações'}};setTimeout(()=>form.querySelector('input,select,textarea')?.focus(),30)}
 function navRender(){const html=pages.map(p=>'<button type="button" data-page="'+p[0]+'" class="'+(page===p[0]?'active':'')+'">'+p[1]+'</button>').join('');$('#nav').innerHTML=html;$('#mobileNav').innerHTML=html;document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>{page=b.dataset.page;history.replaceState(null,'','#'+page);navRender();render()}))}
+function showAuth(msg=''){const auth=$('#auth'),app=$('#app');if(auth)auth.classList.remove('hidden');if(app)app.classList.add('hidden');if(msg)$('#authMsg').textContent=msg;const pass=$('#authPass');if(pass){pass.value='';pass.focus()}}
+function clearAccess(){appPassword='';sessionStorage.removeItem('cris_finance_password');}
+async function tryAccess(password){
+  appPassword=String(password||'');
+  if(!appPassword){showAuth('Digite a senha de acesso.');return false}
+  sessionStorage.setItem('cris_finance_password',appPassword);
+  $('#authSubmit').disabled=true;$('#authMsg').textContent='Verificando...';
+  const q=await sb.from('suppliers').select('id').limit(1);
+  if(q.error){
+    clearAccess();
+    $('#authSubmit').disabled=false;
+    showAuth('Senha incorreta.');
+    return false;
+  }
+  user={id:AUTH_USER_ID};
+  $('#authSubmit').disabled=false;
+  const auth=$('#auth'),app=$('#app');if(auth)auth.classList.add('hidden');if(app)app.classList.remove('hidden');
+  await boot();
+  return true;
+}
+$('#authForm').addEventListener('submit',async e=>{e.preventDefault();await tryAccess($('#authPass').value)});
 async function boot(){user={id:AUTH_USER_ID};const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp))page=hp;const app=$('#app'),today=$('#todayLabel');if(app)app.classList.remove('hidden');if(today)today.textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});navRender();await loadAll()}
-$('#editClose').addEventListener('click',closeEditor);$('#editCancel').addEventListener('click',closeEditor);$('#editModal').addEventListener('click',e=>{if(e.target.id==='editModal')closeEditor()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#editModal').classList.contains('hidden'))closeEditor()});$('#refresh').addEventListener('click',loadAll);
-window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp)&&hp!==page){page=hp;navRender();render()}});
+$('#editClose').addEventListener('click',closeEditor);$('#editCancel').addEventListener('click',closeEditor);$('#editModal').addEventListener('click',e=>{if(e.target.id==='editModal')closeEditor()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#editModal').classList.contains('hidden'))closeEditor()});$('#refresh').addEventListener('click',loadAll);$('#logout').addEventListener('click',()=>{clearAccess();location.reload()});
+window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp)&&hp!==page){page=hp;navRender();render()}});const savedPass=sessionStorage.getItem('cris_finance_password');if(savedPass){appPassword=savedPass;tryAccess(savedPass)}else{showAuth()}
 
 async function loadAll(){
+  if(!appPassword){showAuth();return false}
   if(!user) user={id:AUTH_USER_ID};
   const queries=[
     ['fornecedores',sb.from('suppliers').select('*').order('name')],
@@ -121,9 +160,12 @@ async function loadAll(){
   };
   if(errors.length){
     console.error('Erros ao carregar dados:',errors.map(([name,q])=>({name,error:q.error})));
+    const authError=errors.some(([,q])=>q.error&&(q.error.code==='FINANCE_AUTH'||q.error.status===401||q.error.statusCode===401));
+    if(authError){clearAccess();showAuth('Sessão expirada ou senha inválida.');return false}
     toast('Os dados foram carregados parcialmente. Erro em: '+errors.map(([name])=>name).join(', '));
   }
   render();
+  return true;
 }
 function paidFor(id){return data.payments.filter(x=>x.payable_id===id).reduce((a,b)=>a+Number(b.amount),0)} function payableBal(p){return Math.max(0,Number(p.current_amount)-paidFor(p.id))} function receivedFor(id){return data.receivablePayments.filter(x=>x.receivable_id===id).reduce((a,b)=>a+Number(b.amount),0)}
 function effectiveStatus(p){const bal=payableBal(p);if(bal<=.005)return 'paid';if(paidFor(p.id)>0)return 'partial';if(p.due_date<isoToday())return 'overdue';return 'open'}

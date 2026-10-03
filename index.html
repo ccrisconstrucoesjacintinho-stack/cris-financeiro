@@ -102,12 +102,11 @@ const SUPABASE_URL='https://nxjtninxbikekdcufdqz.supabase.co';
 const SUPABASE_KEY='sb_publishable_SOpFBEWN_nOMWFLsCpcKfA_akvfFFWG';
 const AUTH_USER_ID='a7b397b7-55b9-41c6-8379-0a599c216377';
 let appPassword=sessionStorage.getItem('cris_finance_password')||'';
-const financeFetch=async(url,opts={})=>{
-  const headers=new Headers(opts.headers||{});
-  if(appPassword) headers.set('x-finance-password',appPassword);
-  return fetch(url,{...opts,headers});
-};
-const sb=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:financeFetch}});
+let sb=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{headers:appPassword?{'x-finance-password':appPassword}:{}}});
+function setFinancePassword(password){
+  setFinancePassword(password);
+  sb=createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{headers:{'x-finance-password':appPassword}}});
+}
 function opts(items,selected){return (items||[]).map(v=>{const value=Array.isArray(v)?v[0]:v;const label=Array.isArray(v)?v[1]:v;return '<option value="'+esc(value)+'" '+(String(value)===String(selected)?'selected':'')+'>'+esc(label)+'</option>'}).join('')} const $=s=>document.querySelector(s); const money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));
 const dbr=d=>d?new Date(d+'T12:00:00').toLocaleDateString('pt-BR'):'—'; const isoToday=()=>new Date().toISOString().slice(0,10); const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 let signup=false, user={id:AUTH_USER_ID}, page='dashboard', taxTypeFilter='Estadual', reportMode='cashflow';
@@ -140,7 +139,7 @@ async function tryAccess(password){
 $('#authForm').addEventListener('submit',async e=>{e.preventDefault();await tryAccess($('#authPass').value)});
 async function boot(){user={id:AUTH_USER_ID};const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp))page=hp;const app=$('#app'),today=$('#todayLabel');if(app)app.classList.remove('hidden');if(today)today.textContent=new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});navRender();await loadAll()}
 $('#editClose').addEventListener('click',closeEditor);$('#editCancel').addEventListener('click',closeEditor);$('#editModal').addEventListener('click',e=>{if(e.target.id==='editModal')closeEditor()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#editModal').classList.contains('hidden'))closeEditor()});$('#refresh').addEventListener('click',loadAll);$('#logout').addEventListener('click',()=>{clearAccess();location.reload()});
-window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp)&&hp!==page){page=hp;navRender();render()}});const savedPass=sessionStorage.getItem('cris_finance_password');if(savedPass){appPassword=savedPass;tryAccess(savedPass)}else{showAuth()}
+window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','');if(pages.some(p=>p[0]===hp)&&hp!==page){page=hp;navRender();render()}});const savedPass=sessionStorage.getItem('cris_finance_password');if(savedPass){setFinancePassword(savedPass);tryAccess(savedPass)}else{showAuth()}
 
 async function loadAll(){
   if(!appPassword){showAuth();return false}
@@ -498,55 +497,3 @@ async function editPayable(id){
   const paid=paidFor(id), supplierOptions=[['','Sem fornecedor'],...data.suppliers.map(s=>[s.id,s.name])];
   const categories=['Fornecedor','Imposto','Despesa fixa','Dívida','Empréstimo','Outros'].map(x=>[x,x]);
   const priorities=[['normal','Normal'],['high','Alta'],['critical','Crítica'],['low','Baixa']];
-  openEditor('Editar conta a pagar',
-    '<div><label>Fornecedor</label><select class="field" name="supplier_id">'+opts(supplierOptions,p.supplier_id||'')+'</select></div>'+ 
-    '<div class="span2"><label>Descrição</label><input class="field" name="description" required value="'+esc(p.description||'')+'" /></div>'+ 
-    '<div><label>'+(isTaxPayable(p)?'Valor desta parcela':'Valor total')+'</label><input class="field" name="amount" type="number" min="'+Math.max(.01,paid).toFixed(2)+'" step="0.01" required value="'+Number(p.current_amount||0).toFixed(2)+'" /></div>'+ 
-    '<div><label>Vencimento</label><input class="field" name="due_date" type="date" required value="'+esc(p.due_date||'')+'" /></div>'+ 
-    '<div><label>Categoria</label><select class="field" name="category">'+opts(categories,p.category||'Fornecedor')+'</select></div>'+ 
-    '<div><label>Prioridade</label><select class="field" name="priority">'+opts(priorities,p.priority||'normal')+'</select></div>'+ 
-    '<div><label>Nº boleto/documento</label><input class="field" name="document_number" value="'+esc(p.document_number||'')+'" /></div>'+ 
-    '<div><label>Substituir anexo</label><input class="field" name="file" type="file" multiple accept="image/*,.pdf" /><div class="field-note">Se não escolher arquivo, o anexo atual será mantido.</div></div>'+ 
-    '<div class="span3"><label>Observação</label><textarea class="field" name="notes">'+esc(p.notes||'')+'</textarea></div>'+ 
-    '<div class="span3 edit-hint">Já pago nesta conta: <strong>'+money(paid)+'</strong>. O novo valor total não pode ficar abaixo desse valor.</div>',
-    async f=>{
-      const amount=Number(f.get('amount'));
-      if(!amount||amount<=0){toast('Informe um valor válido para a parcela.');return false}
-      if(isTaxPayable(p)){
-        if(amount<paid-.005){toast('O valor não pode ser menor que o que já foi pago nesta parcela.');return false}
-        const qTax=await sb.from('accounts_payable').update({current_amount:amount}).eq('id',id);
-        if(qTax.error){toast(qTax.error.message);return false}
-        toast('Valor da parcela atualizado');await loadAll();return true
-      }
-      if(amount<paid-.005){toast('O valor total não pode ser menor que o valor já pago.');return false}
-      const nextCategory=String(f.get('category')||'Fornecedor').trim();
-      if(nextCategory==='Imposto'){
-        const qTax=await sb.from('accounts_payable').update({supplier_id:null,category:'Imposto - Estadual'}).eq('id',id);
-        if(qTax.error){toast(qTax.error.message);return false}
-        toast('Conta alterada para Imposto');await loadAll();return true
-      }
-      let attachment_path=p.attachment_path||null;const files=f.getAll('file');
-      if(files.some(v=>v&&v.size)){try{attachment_path=attachmentValue(await uploadAttachmentFiles(files,user.id+'/contas'))}catch(err){if(err.message!=='__VALIDATION__')toast('Erro ao anexar: '+err.message);return false}}
-      const balance=Math.max(0,amount-paid);const payload={supplier_id:f.get('supplier_id')||null,description:String(f.get('description')||'').trim(),document_number:f.get('document_number')||null,category:f.get('category'),original_amount:amount,current_amount:amount,due_date:f.get('due_date'),priority:f.get('priority'),notes:f.get('notes')||null,attachment_path,status:balance<=.005?'paid':paid>0?'partial':'open'};
-      if(!payload.description){toast('Preencha a descrição.');return false}
-      const q=await sb.from('accounts_payable').update(payload).eq('id',id);if(q.error){toast(q.error.message);return false}toast('Conta atualizada');await loadAll();return true
-    });
-}
-function renderSuppliers(){
-  $('#content').innerHTML='<div class="formbox"><div class="section-title"><h3>Novo fornecedor</h3></div><form id="supplierForm"><div class="formgrid"><div><label>Nome</label><input class="field" name="name" required /></div><div><label>CNPJ/CPF</label><input class="field" name="document" /></div><div><label>Telefone / WhatsApp</label><input class="field" name="phone" /></div><div><label>Contato</label><input class="field" name="contact_name" /></div><div class="span2"><label>Observação</label><input class="field" name="notes" /></div></div><div class="form-actions"><button class="btn" type="submit">Salvar fornecedor</button></div></form></div><div class="list">'+(data.suppliers.length?data.suppliers.map(s=>{const ps=data.payables.filter(p=>p.supplier_id===s.id),open=ps.reduce((a,p)=>a+payableBal(p),0),paid=ps.reduce((a,p)=>a+paidFor(p.id),0);return '<div class="row"><div><div class="title">'+esc(s.name)+'</div><div class="sub">'+esc(s.phone||'Sem telefone')+'</div></div><div><div class="sub">Já pago</div><strong>'+money(paid)+'</strong></div><div class="money">Devemos '+money(open)+'</div><div class="actions"><button class="btn secondary small" data-editsupplier="'+s.id+'">Editar</button><button class="btn danger small" data-delsupplier="'+s.id+'">Excluir</button></div></div>'}).join(''):'<div class="empty">Cadastre seus fornecedores para saber exatamente quanto deve a cada um.</div>')+'</div>';
-  $('#supplierForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target),q=await sb.from('suppliers').insert({user_id:user.id,name:f.get('name'),document:f.get('document')||null,phone:f.get('phone')||null,contact_name:f.get('contact_name')||null,notes:f.get('notes')||null});if(q.error)toast(q.error.message);else{toast('Fornecedor salvo');await loadAll()}});
-  document.querySelectorAll('[data-editsupplier]').forEach(b=>b.addEventListener('click',()=>editSupplier(b.dataset.editsupplier)));
-  document.querySelectorAll('[data-delsupplier]').forEach(b=>b.addEventListener('click',()=>deleteRow('suppliers',b.dataset.delsupplier,'Excluir fornecedor? As contas existentes ficarão sem fornecedor.')))
-}
-function editSupplier(id){
-  const s=data.suppliers.find(x=>x.id===id);if(!s)return;
-  openEditor('Editar fornecedor','<div><label>Nome</label><input class="field" name="name" required value="'+esc(s.name||'')+'" /></div><div><label>CNPJ/CPF</label><input class="field" name="document" value="'+esc(s.document||'')+'" /></div><div><label>Telefone / WhatsApp</label><input class="field" name="phone" value="'+esc(s.phone||'')+'" /></div><div><label>Contato</label><input class="field" name="contact_name" value="'+esc(s.contact_name||'')+'" /></div><div class="span2"><label>Observação</label><textarea class="field" name="notes">'+esc(s.notes||'')+'</textarea></div>',async f=>{const name=String(f.get('name')||'').trim();if(!name){toast('Preencha o nome do fornecedor.');return false}const q=await sb.from('suppliers').update({name,document:f.get('document')||null,phone:f.get('phone')||null,contact_name:f.get('contact_name')||null,notes:f.get('notes')||null}).eq('id',id);if(q.error){toast(q.error.message);return false}toast('Fornecedor atualizado');await loadAll();return true})
-}
-function renderIncome(){renderSimpleLedger('income','Nova entrada','Entradas registradas',['Venda','Caixa do dia','Pix','Dinheiro','Cartão','Empréstimo recebido','Outros'])}
-function renderExpenses(){renderSimpleLedger('expenses','Nova saída avulsa','Saídas avulsas',['Compra de mercadoria','Despesa fixa','Imposto','Dívida','Retirada','Empréstimo','Outros'])}
-function renderSimpleLedger(type,title,listTitle,cats){
-  const arr=data[type],fuelExpenseIds=new Set((data.fuel||[]).map(f=>f.expense_id).filter(Boolean));
-  $('#content').innerHTML='<div class="notice"><strong>'+(type==='expenses'?'Pagamentos de boletos e abastecimentos já entram automaticamente nas saídas.':'Você pode lançar só o total do caixa do dia, se preferir.')+'</strong>'+(type==='expenses'?'Use esta área para outros gastos avulsos. Abastecimentos são gerenciados na aba Gasolina para evitar duplicidade.':'Não é obrigatório registrar venda por venda.')+'</div><div class="formbox"><div class="section-title"><h3>'+title+'</h3></div><form id="ledgerForm"><div class="formgrid"><div class="span2"><label>Descrição</label><input class="field" name="description" required /></div><div><label>Valor</label><input class="field" name="amount" type="number" min="0.01" step="0.01" required /></div><div><label>Data</label><input class="field" name="date" type="date" value="'+isoToday()+'" required /></div><div><label>Categoria</label><select class="field" name="category">'+cats.map(c=>'<option>'+c+'</option>').join('')+'</select></div><div><label>Forma</label><select class="field" name="method"><option>Pix</option><option>Dinheiro</option><option>Débito</option><option>Crédito</option><option>Transferência</option><option>Outro</option></select></div></div><div class="form-actions"><button class="btn" type="submit">Salvar</button></div></form></div><div class="section-title"><h3>'+listTitle+'</h3></div><div class="list">'+(arr.length?arr.map(x=>{const isFuel=type==='expenses'&&fuelExpenseIds.has(x.id);return '<div class="row"><div><div class="title">'+esc(x.description)+'</div><div class="sub">'+esc(x.category)+' · '+esc(x.payment_method||'')+(isFuel?' · <span class="pill">⛽ Gasolina</span>':'')+'</div></div><div class="datecol">'+dbr(x.occurred_at)+'</div><div class="money">'+money(x.amount)+'</div><div class="actions">'+(isFuel?'<button class="btn secondary small" data-go-gas="1">Abrir Gasolina</button>':'<button class="btn secondary small" data-edit-ledger="'+x.id+'">Editar</button><button class="btn danger small" data-del-ledger="'+x.id+'">Excluir</button>')+'</div></div>'}).join(''):'<div class="empty">Nenhum lançamento ainda.</div>')+'</div>';
-  $('#ledgerForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target),obj={user_id:user.id,description:f.get('description'),amount:Number(f.get('amount')),occurred_at:f.get('date'),category:f.get('category'),payment_method:f.get('method')};const q=await sb.from(type).insert(obj);if(q.error)toast(q.error.message);else{toast('Lançamento salvo');await loadAll()}});
-  document.querySelectorAll('[data-edit-ledger]').forEach(b=>b.addEventListener('click',()=>editLedger(type,b.dataset.editLedger,cats)));
-  document.querySelectorAll('[data-del-ledger]').forEach(b=>b.addEventListener('click',()=>deleteRow(type,b.dataset.delLedger,'Excluir este lançamento?')));

@@ -99,6 +99,28 @@ window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','')
 
 async function loadAll(){
   if(!user) user={id:AUTH_USER_ID};
+  try{
+    const q=await sb.rpc('finance_snapshot');
+    if(!q.error && q.data){
+      const s=q.data;
+      data={
+        suppliers:Array.isArray(s.suppliers)?s.suppliers:[],
+        payables:Array.isArray(s.payables)?s.payables:[],
+        payments:Array.isArray(s.payments)?s.payments:[],
+        income:Array.isArray(s.income)?s.income:[],
+        expenses:Array.isArray(s.expenses)?s.expenses:[],
+        receivables:Array.isArray(s.receivables)?s.receivables:[],
+        receivablePayments:Array.isArray(s.receivablePayments)?s.receivablePayments:[],
+        fuel:Array.isArray(s.fuel)?s.fuel:[],
+        debts:Array.isArray(s.debts)?s.debts:[],
+        taxInstallments:Array.isArray(s.taxInstallments)?s.taxInstallments:[]
+      };
+      console.log('Banco carregado:',{fornecedores:data.suppliers.length,contasPagar:data.payables.length,pagamentos:data.payments.length,entradas:data.income.length,saidas:data.expenses.length,contasReceber:data.receivables.length,recebimentos:data.receivablePayments.length,gasolina:data.fuel.length,dividas:data.debts.length,parcelasImpostos:data.taxInstallments.length});
+      render();
+      return;
+    }
+    console.error('finance_snapshot falhou:',q.error);
+  }catch(err){console.error('finance_snapshot falhou:',err)}
   const queries=[
     ['fornecedores',sb.from('suppliers').select('*').order('name')],
     ['contas a pagar',sb.from('accounts_payable').select('*').order('due_date')],

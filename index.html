@@ -101,58 +101,55 @@ window.addEventListener('hashchange',()=>{const hp=location.hash.replace('#','')
 async function loadAll(){
   if(!user) user={id:AUTH_USER_ID};
   try{
-    const q=await sb.rpc('finance_snapshot');
-    if(!q.error && q.data){
-      const s=q.data;
-      data={
-        suppliers:Array.isArray(s.suppliers)?s.suppliers:[],
-        payables:Array.isArray(s.payables)?s.payables:[],
-        payments:Array.isArray(s.payments)?s.payments:[],
-        income:Array.isArray(s.income)?s.income:[],
-        expenses:Array.isArray(s.expenses)?s.expenses:[],
-        receivables:Array.isArray(s.receivables)?s.receivables:[],
-        receivablePayments:Array.isArray(s.receivablePayments)?s.receivablePayments:[],
-        fuel:Array.isArray(s.fuel)?s.fuel:[],
-        debts:Array.isArray(s.debts)?s.debts:[],
-        taxInstallments:Array.isArray(s.taxInstallments)?s.taxInstallments:[]
-      };
-      console.log('Banco carregado:',{fornecedores:data.suppliers.length,contasPagar:data.payables.length,pagamentos:data.payments.length,entradas:data.income.length,saidas:data.expenses.length,contasReceber:data.receivables.length,recebimentos:data.receivablePayments.length,gasolina:data.fuel.length,dividas:data.debts.length,parcelasImpostos:data.taxInstallments.length});
-      render();
-      return;
-    }
-    console.error('finance_snapshot falhou:',q.error);
-  }catch(err){console.error('finance_snapshot falhou:',err)}
-  const queries=[
-    ['fornecedores',sb.from('suppliers').select('*').order('name')],
-    ['contas a pagar',sb.from('accounts_payable').select('*').order('due_date')],
-    ['pagamentos',sb.from('payments').select('*')],
-    ['entradas',sb.from('income').select('*').order('occurred_at',{ascending:false})],
-    ['saídas',sb.from('expenses').select('*').order('occurred_at',{ascending:false})],
-    ['contas a receber',sb.from('accounts_receivable').select('*').order('due_date')],
-    ['recebimentos',sb.from('receivable_payments').select('*')],
-    ['gasolina',sb.from('fuel_expenses').select('*').order('fueled_at',{ascending:false})],
-    ['mapa das dívidas',sb.from('debt_items').select('*').order('priority').order('due_date')]
-  ];
-  const results=await Promise.all(queries.map(async([name,q])=>[name,await q]));
-  const errors=results.filter(([,q])=>q.error);
-  const byName=Object.fromEntries(results);
-  data={
-    suppliers:byName['fornecedores']?.data||[],
-    payables:byName['contas a pagar']?.data||[],
-    payments:byName['pagamentos']?.data||[],
-    income:byName['entradas']?.data||[],
-    expenses:byName['saídas']?.data||[],
-    receivables:byName['contas a receber']?.data||[],
-    receivablePayments:byName['recebimentos']?.data||[],
-    fuel:byName['gasolina']?.data||[],
-    debts:byName['mapa das dívidas']?.data||[]
-  };
-  if(errors.length){
-    console.error('Erros ao carregar dados:',errors.map(([name,q])=>({name,error:q.error})));
-    toast('Os dados foram carregados parcialmente. Erro em: '+errors.map(([name])=>name).join(', '));
+    // Carrega o snapshot diretamente pela API REST do Supabase.
+    // Isso evita diferenças de compatibilidade do cliente JS e mantém todo o banco em uma única resposta.
+    const res=await fetch(SUPABASE_URL+'/rest/v1/rpc/finance_snapshot',{
+      method:'POST',
+      headers:{
+        apikey:SUPABASE_KEY,
+        Authorization:'Bearer '+SUPABASE_KEY,
+        'Content-Type':'application/json',
+        Accept:'application/json'
+      },
+      body:'{}'
+    });
+    const raw=await res.text();
+    if(!res.ok) throw new Error('Supabase RPC '+res.status+': '+raw);
+    const s=JSON.parse(raw);
+    if(!s || typeof s!=='object') throw new Error('Resposta do banco inválida.');
+    data={
+      suppliers:Array.isArray(s.suppliers)?s.suppliers:[],
+      payables:Array.isArray(s.payables)?s.payables:[],
+      payments:Array.isArray(s.payments)?s.payments:[],
+      income:Array.isArray(s.income)?s.income:[],
+      expenses:Array.isArray(s.expenses)?s.expenses:[],
+      receivables:Array.isArray(s.receivables)?s.receivables:[],
+      receivablePayments:Array.isArray(s.receivablePayments)?s.receivablePayments:[],
+      fuel:Array.isArray(s.fuel)?s.fuel:[],
+      debts:Array.isArray(s.debts)?s.debts:[],
+      taxInstallments:Array.isArray(s.taxInstallments)?s.taxInstallments:[]
+    };
+    console.log('Banco carregado:',{
+      fornecedores:data.suppliers.length,
+      contasPagar:data.payables.length,
+      pagamentos:data.payments.length,
+      entradas:data.income.length,
+      saidas:data.expenses.length,
+      contasReceber:data.receivables.length,
+      recebimentos:data.receivablePayments.length,
+      gasolina:data.fuel.length,
+      dividas:data.debts.length,
+      parcelasImpostos:data.taxInstallments.length
+    });
+    render();
+  }catch(err){
+    console.error('Falha ao carregar banco:',err);
+    toast('Não foi possível carregar o banco. '+(err?.message||'Verifique a conexão.'));
+    const box=$('#runtimeError');
+    if(box){box.style.display='block';box.textContent='Erro do banco: '+(err?.message||String(err));}
   }
-  render();
 }
+
 function paidFor(id){return data.payments.filter(x=>x.payable_id===id).reduce((a,b)=>a+Number(b.amount),0)} function payableBal(p){return Math.max(0,Number(p.current_amount)-paidFor(p.id))} function receivedFor(id){return data.receivablePayments.filter(x=>x.receivable_id===id).reduce((a,b)=>a+Number(b.amount),0)}
 function effectiveStatus(p){const bal=payableBal(p);if(bal<=.005)return 'paid';if(paidFor(p.id)>0)return 'partial';if(p.due_date<isoToday())return 'overdue';return 'open'}
 function renderTaxes(){

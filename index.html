@@ -270,12 +270,17 @@ function payableTabCount(tab){
 function updatePayablesSearch(){
   const input=$('#payableSearch');
   const tabs=$('#payableTabs');
+  const supplierFilter=$('#payableSupplierFilter');
   if(!input||!tabs)return;
   const q=input.value;
   const tab=tabs.dataset.tab||'all';
-  const filtered=nonTaxPayables().filter(p=>payableTabMatch(p,tab)&&payableMatchesSearch(p,q));
+  const supplierId=supplierFilter?.value||'';
+  const filtered=nonTaxPayables().filter(p=>{
+    if(supplierId && String(p.supplier_id||'')!==String(supplierId))return false;
+    return payableTabMatch(p,tab)&&payableMatchesSearch(p,q);
+  });
   const area=$('#payablesListArea'),count=$('#payableSearchCount');
-  if(count)count.textContent=q.trim()?filtered.length+' encontrada(s)':filtered.length+' conta(s)';
+  if(count)count.textContent=filtered.length+' conta(s) encontrada(s)';
   if(area)area.innerHTML=payableList(filtered,false);
   bindPayableEvents();
 }
@@ -289,12 +294,13 @@ function renderPayables(){
     '<div id="payableTabs" data-tab="all" class="toolbar" style="margin-bottom:10px">'+
       tabs.map(t=>'<button type="button" class="btn '+(t==='all'?'':'secondary')+' small" data-pay-tab="'+t+'">'+payableTabLabel(t)+' <span class="pill" style="margin-left:4px">'+payableTabCount(t)+'</span></button>').join('')+
     '</div>'+
-    '<div class="toolbar" style="align-items:center"><input id="payableSearch" class="field" style="min-width:280px;flex:1" type="search" placeholder="🔎 Pesquisar fornecedor, conta, nº do boleto, observação..." autocomplete="off" /><button id="clearPayableSearch" class="btn secondary small" type="button">Limpar</button><span id="payableSearchCount" class="pill"></span></div>'+
+    '<div class="toolbar" style="align-items:center"><select id="payableSupplierFilter" class="field" style="min-width:230px"><option value="">Todos os fornecedores</option>'+opts+'</select><input id="payableSearch" class="field" style="min-width:280px;flex:1" type="search" placeholder="🔎 Pesquisar conta, nº do boleto, observação..." autocomplete="off" /><button id="clearPayableSearch" class="btn secondary small" type="button">Limpar filtros</button><span id="payableSearchCount" class="pill"></span></div>'+
     '<div id="payablesListArea">'+payableList(payableOnly.filter(p=>payableTabMatch(p,'all')),false)+'</div>';
   bindPayableEvents();
   $('#payableForm').addEventListener('submit',savePayable);
   $('#payableSearch').addEventListener('input',updatePayablesSearch);
-  $('#clearPayableSearch').addEventListener('click',()=>{$('#payableSearch').value='';updatePayablesSearch();$('#payableSearch').focus()});
+  $('#payableSupplierFilter').addEventListener('change',updatePayablesSearch);
+  $('#clearPayableSearch').addEventListener('click',()=>{$('#payableSearch').value='';$('#payableSupplierFilter').value='';updatePayablesSearch();$('#payableSearch').focus()});
   document.querySelectorAll('[data-pay-tab]').forEach(btn=>btn.addEventListener('click',()=>{
     const tabsEl=$('#payableTabs');
     tabsEl.dataset.tab=btn.dataset.payTab;
